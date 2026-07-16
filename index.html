@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1b7a4d">
+<title>تتبع دفوعات الطلبة</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="shortcut icon" type="image/png" href="favicon-32.png">
+<style>
+  :root{
+    --green:#1b8a4d;
+    --green-light:#e5f6ec;
+    --amber:#b9790a;
+    --amber-light:#fdf1dc;
+    --red:#c0392b;
+    --red-light:#fbe9e7;
+    --ink:#1c2128;
+    --sub:#6b7280;
+    --border:#e7e7ea;
+    --bg:#f5f6f8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);
+    padding-bottom:90px;
+  }
+  header{
+    background:#fff;padding:18px 16px 14px;border-bottom:1px solid var(--border);
+    position:sticky;top:0;z-index:5;
+  }
+  header h1{margin:0 0 4px;font-size:20px;}
+  header p{margin:0;color:var(--sub);font-size:13px;line-height:1.5;}
+  .top-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .pill-btn{
+    border:1px solid var(--border);background:#fff;border-radius:20px;
+    padding:7px 14px;font-size:12.5px;color:var(--ink);cursor:pointer;
+  }
+  .pill-btn.active{background:var(--green-light);border-color:var(--green);color:var(--green);}
+  .stats{display:flex;gap:8px;padding:14px 16px 4px;flex-wrap:wrap;}
+  .stat{
+    background:#fff;border:1px solid var(--border);border-radius:14px;
+    padding:8px 14px;font-size:12.5px;flex:1;text-align:center;min-width:90px;
+  }
+  .stat b{display:block;font-size:16px;margin-bottom:2px;}
+  .stat.ok b{color:var(--green);} .stat.late b{color:var(--red);} .stat.done b{color:var(--sub);}
+  .list{padding:12px 16px;display:flex;flex-direction:column;gap:12px;}
+  .card{
+    background:#fff;border-radius:16px;padding:14px 14px 12px;
+    border-inline-start:5px solid var(--green);box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .card.late{border-inline-start-color:var(--red);}
+  .card.soon{border-inline-start-color:var(--amber);}
+  .card.done{border-inline-start-color:#9aa0a6;}
+  .card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .card-top .name{font-size:17px;font-weight:700;cursor:pointer;}
+  .search-wrap{padding:10px 16px 0;}
+  .search-wrap input{
+    width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;
+    font-size:14px;font-family:inherit;background:#fff;
+  }
+  .badge{
+    font-size:12px;padding:4px 10px;border-radius:20px;font-weight:600;
+    background:var(--green-light);color:var(--green);
+  }
+  .badge.late{background:var(--red-light);color:var(--red);}
+  .badge.soon{background:var(--amber-light);color:var(--amber);}
+  .badge.done{background:#eef0f2;color:#5f6368;}
+  .lock-btn{background:none;border:none;font-size:17px;cursor:pointer;padding:2px 4px;}
+  .name{font-size:17px;font-weight:700;margin:2px 0 8px;}
+  .info{font-size:13px;color:#3c4043;margin:3px 0;}
+  .progress-track{background:#eceff1;border-radius:6px;height:7px;margin-top:10px;overflow:hidden;}
+  .progress-fill{background:var(--green);height:100%;border-radius:6px;transition:width .3s;}
+  .card.late .progress-fill{background:var(--red);}
+  .card.soon .progress-fill{background:var(--amber);}
+  .months{display:none;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .months.open{display:flex;}
+  .m-btn{
+    width:30px;height:30px;border-radius:8px;font-size:12px;display:flex;
+    align-items:center;justify-content:center;border:1px solid var(--border);background:#fafafa;color:#9aa0a6;
+  }
+  .m-btn.paid{background:var(--green);color:#fff;border-color:var(--green);}
+  .m-btn.due{background:var(--red);color:#fff;border-color:var(--red);cursor:pointer;font-weight:700;}
+  .m-btn.locked-paid{opacity:.9;pointer-events:none;}
+  .card-actions{display:flex;gap:8px;margin-top:12px;}
+  .card-actions button{
+    flex:1;border:1px solid var(--border);background:#fff;border-radius:10px;
+    padding:8px;font-size:12.5px;color:var(--ink);
+  }
+  .card-actions .danger{color:var(--red);border-color:#f3c9c4;}
+  .status-pill{
+    border:none;font-weight:700;padding:9px 18px;border-radius:22px;
+    font-size:13px;color:#fff;display:inline-block;
+  }
+  .status-pill.unpaid{background:var(--red);cursor:pointer;}
+  .status-pill.paid{background:var(--green);cursor:default;}
+  .bottom-row{display:flex;gap:10px;margin-top:12px;}
+  .bottom-row button{
+    flex:1;border:none;border-radius:12px;padding:11px;
+    font-size:13px;font-weight:700;color:#fff;cursor:pointer;
+  }
+  .bottom-row .btn-delete{background:var(--red);}
+  .bottom-row .btn-pay{background:var(--green);}
+  .bottom-row .btn-undo{background:var(--red);}
+  .btn-more{
+    flex:0 0 auto !important;background:#eef0f2 !important;color:#5f6368 !important;
+    width:44px;padding:11px 0 !important;
+  }
+  .fab-row{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    display:flex;gap:16px;align-items:center;z-index:15;
+  }
+  .fab{
+    width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;
+    border:none;font-size:28px;box-shadow:0 4px 12px rgba(0,0,0,.25);cursor:pointer;
+  }
+  .fab-mic{
+    width:56px;height:56px;border-radius:50%;background:var(--amber);color:#fff;
+    border:none;font-size:24px;box-shadow:0 4px 12px rgba(0,0,0,.25);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fab-mic.listening{
+    background:var(--red);
+    animation:micPulse 1.2s infinite;
+  }
+  @keyframes micPulse{
+    0%{box-shadow:0 4px 12px rgba(0,0,0,.25),0 0 0 0 rgba(192,57,43,.5);}
+    70%{box-shadow:0 4px 12px rgba(0,0,0,.25),0 0 0 14px rgba(192,57,43,0);}
+    100%{box-shadow:0 4px 12px rgba(0,0,0,.25),0 0 0 0 rgba(192,57,43,0);}
+  }
+  @media (prefers-reduced-motion: reduce){ .fab-mic.listening{animation:none;} }
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;
+    align-items:flex-end;justify-content:center;z-index:20;
+  }
+  .overlay.open{display:flex;}
+  .sheet{
+    background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;
+    max-width:480px;max-height:85vh;overflow:auto;
+  }
+  .sheet h2{margin-top:0;font-size:17px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:5px;}
+  .field input, .field textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+    font-size:14px;font-family:inherit;
+  }
+  .field textarea{min-height:120px;font-family:monospace;font-size:12px;direction:ltr;text-align:left;}
+  .sheet-actions{display:flex;gap:10px;margin-top:6px;}
+  .sheet-actions button{
+    flex:1;padding:11px;border-radius:10px;border:none;font-size:14px;cursor:pointer;
+  }
+  .btn-primary{background:var(--green);color:#fff;}
+  .btn-secondary{background:#eee;color:var(--ink);}
+  .empty{text-align:center;color:var(--sub);padding:40px 20px;font-size:14px;}
+  .settings-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 0;border-bottom:1px solid var(--border);font-size:13.5px;gap:10px;
+  }
+  .settings-row button{white-space:nowrap;}
+  .caption-box{
+    position:fixed;bottom:92px;left:50%;transform:translateX(-50%);
+    background:#1c2128;color:#fff;padding:10px 18px;border-radius:16px;
+    font-size:15px;max-width:88vw;text-align:center;z-index:16;
+    display:none;
+  }
+  .caption-box.show{display:block;}
+  .toast{
+    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+    background:#1c2128;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;
+    opacity:0;transition:opacity .3s;z-index:30;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+  .lock-screen{
+    position:fixed;inset:0;background:var(--green);z-index:100;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#fff;padding:24px;
+  }
+  .lock-screen.hidden{display:none;}
+  .lock-screen h2{margin:0 0 6px;font-size:20px;}
+  .lock-screen p{margin:0 0 24px;opacity:.85;font-size:13px;}
+  .lock-dots{display:flex;gap:14px;margin-bottom:28px;}
+  .lock-dot{width:16px;height:16px;border-radius:50%;border:2px solid #fff;background:transparent;}
+  .lock-dot.filled{background:#fff;}
+  .lock-pad{display:grid;grid-template-columns:repeat(3,72px);gap:14px;}
+  .lock-key{
+    width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,.4);
+    background:rgba(255,255,255,.08);color:#fff;font-size:24px;
+  }
+  .lock-key:active{background:rgba(255,255,255,.25);}
+  .lock-key.wide{grid-column:span 1;font-size:15px;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-8px);}
+    40%{transform:translateX(8px);}
+    60%{transform:translateX(-8px);}
+    80%{transform:translateX(8px);}
+  }
+</style>
+</head>
+<body>
+
+<!-- PIN lock -->
+<div class="lock-screen" id="lockScreen">
+  <h2>🔒 تتبع دفوعات الطلبة</h2>
+  <p>دخل الرمز السري باش تفتح التطبيق</p>
+  <div class="lock-dots" id="lockDots">
+    <div class="lock-dot"></div><div class="lock-dot"></div><div class="lock-dot"></div><div class="lock-dot"></div>
+  </div>
+  <div class="lock-pad">
+    <button class="lock-key" onclick="pinPress('1')">1</button>
+    <button class="lock-key" onclick="pinPress('2')">2</button>
+    <button class="lock-key" onclick="pinPress('3')">3</button>
+    <button class="lock-key" onclick="pinPress('4')">4</button>
+    <button class="lock-key" onclick="pinPress('5')">5</button>
+    <button class="lock-key" onclick="pinPress('6')">6</button>
+    <button class="lock-key" onclick="pinPress('7')">7</button>
+    <button class="lock-key" onclick="pinPress('8')">8</button>
+    <button class="lock-key" onclick="pinPress('9')">9</button>
+    <button class="lock-key wide" onclick="pinClear()">مسح</button>
+    <button class="lock-key" onclick="pinPress('0')">0</button>
+    <button class="lock-key wide" onclick="pinBackspace()">⌫</button>
+  </div>
+</div>
+
+<header>
+  <h1>تتبع دفوعات الطلبة</h1>
+  <p>دورة ديال 10 أشهر — الحالة كتبان خضراء ملي يتخلصو الأشهر المستحقة</p>
+  <div class="top-actions">
+    <button class="pill-btn" id="notifBtn" onclick="toggleNotif()">🔔 فعل التنبيهات</button>
+    <button class="pill-btn" onclick="openSettings()">⚙️ نسخة احتياطية</button>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat ok"><b id="statOk">0</b>خالصين</div>
+  <div class="stat late" onclick="showLateOnly()" style="cursor:pointer;"><b id="statLate">0</b>متأخرين</div>
+  <div class="stat done"><b id="statDone">0</b>كملو الدورة</div>
+</div>
+
+<div id="backRow" style="display:none;padding:0 16px;margin-top:10px;">
+  <button class="pill-btn active" onclick="clearFilter()">⬅️ رجوع لكل الطلبة</button>
+  <span style="margin-right:10px;color:var(--sub);font-size:13px;">كتبان غير الطلبة المتأخرين</span>
+</div>
+
+<div class="search-wrap">
+  <input type="text" id="searchBox" placeholder="🔍 قلب على طالب بالاسم..." oninput="render()">
+</div>
+
+<div class="list" id="list"></div>
+
+<div class="caption-box" id="captionBox"></div>
+<div class="fab-row">
+  <button class="fab-mic" id="micFab" onclick="startVoicePayment()" title="سجل خلاص بالصوت">🎤</button>
+  <button class="fab" onclick="openAdd()">+</button>
+</div>
+
+<!-- Add student sheet -->
+<div class="overlay" id="addOverlay">
+  <div class="sheet">
+    <h2>إضافة طالب</h2>
+    <div class="field"><label>الاسم</label><input id="fName" placeholder="مثلا: تسيير"></div>
+    <div class="field"><label>تاريخ الالتحاق</label><input id="fDate" type="date"></div>
+    <div class="field"><label>المبلغ الشهري (درهم)</label><input id="fAmount" type="number" value="100"></div>
+    <div class="field"><label>رقم هاتف ولي الأمر (واتساب) — اختياري</label><input id="fPhone" type="tel" placeholder="مثلا 0612345678"></div>
+    <div class="sheet-actions">
+      <button class="btn-secondary" onclick="closeOverlay('addOverlay')">إلغاء</button>
+      <button class="btn-primary" onclick="saveStudent()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings / backup sheet -->
+<div class="overlay" id="settingsOverlay">
+  <div class="sheet">
+    <h2>النسخ الاحتياطي</h2>
+    <div class="settings-row">
+      <span>صيفط نسخة على الإيميل ديالك (Gmail)</span>
+      <button class="pill-btn active" onclick="backupViaGmail()">صيفط</button>
+    </div>
+    <div class="settings-row">
+      <span>شارك عبر واتساب أو أي تطبيق آخر</span>
+      <button class="pill-btn active" onclick="shareBackup()">📤 مشاركة</button>
+    </div>
+    <div class="settings-row">
+      <span>حمّل ملف JSON فالهاتف</span>
+      <button class="pill-btn" onclick="downloadBackup()">تحميل</button>
+    </div>
+    <div class="settings-row">
+      <span>الباكاب التلقائي</span>
+      <button class="pill-btn" id="autoBackupBtn" onclick="toggleAutoBackup()">تفعيل</button>
+    </div>
+    <div class="settings-row">
+      <span>صيفط تلقائي يوميا عبر Gmail (كيحل نافذة الإرسال وحدو، غير تدوس إرسال)</span>
+      <button class="pill-btn" id="autoEmailBtn" onclick="toggleAutoEmailBackup()">تفعيل</button>
+    </div>
+    <div class="settings-row" style="border-bottom:none;">
+      <span>استرجاع من ملف باكاب (JSON)</span>
+      <button class="pill-btn active" onclick="document.getElementById('fileInput').click()">📂 اختيار ملف</button>
+    </div>
+    <input type="file" id="fileInput" accept=".json,application/json" style="display:none" onchange="restoreFromFile(event)">
+    <div class="field" style="margin-top:14px;">
+      <label>أو لصق النص اللي جا فالإيميل</label>
+      <textarea id="restoreBox" placeholder="[{...}]"></textarea>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-secondary" onclick="closeOverlay('settingsOverlay')">إغلاق</button>
+      <button class="btn-primary" onclick="restoreBackup()">استرجاع من النص</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'students_v1';
+const TOTAL_MONTHS = 10;
+let students = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let revealedIds = new Set(); // cards where حذف/إلغاء الخلاص are shown
+let filterMode = 'all'; // 'all' | 'late'
+
+function showLateOnly(){
+  filterMode = 'late';
+  document.getElementById('backRow').style.display = 'block';
+  render();
+  speak('كتبان ليك الطلبة المتأخرين');
+}
+function clearFilter(){
+  filterMode = 'all';
+  document.getElementById('backRow').style.display = 'none';
+  render();
+}
+
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(students)); render(); autoBackupIfNeeded(); autoEmailBackupIfNeeded(); }
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function fmtDate(d){
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-GB'); // DD/MM/YYYY
+}
+function addMonths(dateStr, n){
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + n);
+  return d;
+}
+
+// compute status for a student
+function computeStatus(s){
+  const today = new Date();
+  let dueCount = 0;
+  for(let i=0;i<TOTAL_MONTHS;i++){
+    const due = addMonths(s.startDate, i);
+    if(due <= today) dueCount = i+1;
+  }
+  const paidMonths = s.paidMonths || Array(TOTAL_MONTHS).fill(false);
+  const paidCount = paidMonths.filter(Boolean).length;
+  const paidUpToDue = paidMonths.slice(0, dueCount).filter(Boolean).length;
+  const lateCount = Math.max(0, dueCount - paidUpToDue);
+
+  let status = 'ok'; // ok | late | soon | done
+  if(dueCount >= TOTAL_MONTHS && paidCount >= TOTAL_MONTHS){
+    status = 'done';
+  } else if(lateCount > 0){
+    status = 'late';
+  } else {
+    // paid up to date - check if next due month is within 5 days
+    if(dueCount < TOTAL_MONTHS){
+      const nextDue = addMonths(s.startDate, dueCount);
+      const daysLeft = (nextDue - today) / 86400000;
+      if(daysLeft <= 5) status = 'soon';
+    }
+  }
+  return {dueCount, paidCount, lateCount, status};
+}
+
+function render(){
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  let ok=0, late=0, done=0;
+
+  students.forEach(s=>{
+    const st = computeStatus(s).status;
+    if(st==='ok'||st==='soon') ok++;
+    if(st==='late') late++;
+    if(st==='done') done++;
+  });
+  document.getElementById('statOk').textContent = ok;
+  document.getElementById('statLate').textContent = late;
+  document.getElementById('statDone').textContent = done;
+
+  if(students.length === 0){
+    list.innerHTML = '<div class="empty">مازال ما ضفتيش حتى طالب. دوس على + باش تبدا</div>';
+  }
+
+  const query = (document.getElementById('searchBox')?.value || '').trim();
+  let visibleStudents = query
+    ? students.filter(s => s.name.includes(query))
+    : students;
+
+  if(filterMode === 'late'){
+    visibleStudents = visibleStudents.filter(s => computeStatus(s).status === 'late');
+  }
+
+  if(students.length > 0 && visibleStudents.length === 0){
+    list.innerHTML = filterMode === 'late'
+      ? '<div class="empty">ماكاين حتى طالب متأخر 🎉</div>'
+      : '<div class="empty">ماكاين حتى طالب بهاد الاسم</div>';
+  }
+
+  visibleStudents.forEach(s=>{
+    const {dueCount, paidCount, lateCount, status} = computeStatus(s);
+    if(status==='done') done++;
+
+    const card = document.createElement('div');
+    card.className = 'card ' + (status==='late'?'late':status==='soon'?'soon':status==='done'?'done':'');
+
+    const dueIdx = getFirstUnpaidDueIndex(s);
+    const hasUnpaidDue = dueIdx !== null;
+
+    let pillLabel, pillClass;
+    if(hasUnpaidDue){
+      pillLabel = status==='late' ? `❌ متأخر (${lateCount})` : '❌ ماخلصش بعد';
+      pillClass = 'unpaid';
+    } else if(status==='done'){
+      pillLabel = '🏁 كمل الدورة';
+      pillClass = 'paid';
+    } else if(status==='soon'){
+      pillLabel = '✅ خالص | قرب شهر جديد';
+      pillClass = 'paid';
+    } else {
+      pillLabel = '✅ خالص';
+      pillClass = 'paid';
+    }
+
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="name" onclick="toggleReveal('${s.id}')">${s.name} <span style="font-size:11px;color:#9aa0a6;">▾</span></span>
+        <span class="status-pill ${pillClass}">${pillLabel}</span>
+      </div>
+      <div class="info">التحق في: ${fmtDate(s.startDate)}</div>
+      <div class="info">الأشهر المخلصة: ${paidCount} / ${TOTAL_MONTHS} | مستحق لحد اليوم: ${dueCount}</div>
+      <div class="info">المبلغ الشهري: ${s.monthlyAmount} درهم</div>
+      <div class="info">📱 هاتف ولي الأمر: ${s.phone ? s.phone : 'ماكاينش'} <a href="javascript:void(0)" onclick="editPhone('${s.id}')" style="color:var(--green);text-decoration:none;">✏️ عدل</a></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${(paidCount/TOTAL_MONTHS)*100}%"></div></div>
+      ${revealedIds.has(s.id) ? `
+        <div class="bottom-row">
+          ${hasUnpaidDue
+            ? `<button class="btn-pay" onclick="toggleMonth('${s.id}', ${dueIdx})">💰 خالص</button>`
+            : `<button class="btn-undo" onclick="undoLastPaid('${s.id}')">↩️ إلغاء الخلاص</button>`}
+          <button onclick="sendWhatsAppReminder('${s.id}')" style="background:#25D366;color:#fff;border-color:#25D366;">📱 واتساب</button>
+          <button class="btn-delete" onclick="deleteStudent('${s.id}')">🗑️ حذف</button>
+        </div>
+      ` : ``}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function toggleReveal(id){
+  if(revealedIds.has(id)) revealedIds.delete(id);
+  else revealedIds.add(id);
+  render();
+}
+function getFirstUnpaidDueIndex(s){
+  const today = new Date();
+  const paidMonths = s.paidMonths || Array(TOTAL_MONTHS).fill(false);
+  for(let i=0;i<TOTAL_MONTHS;i++){
+    const due = addMonths(s.startDate, i);
+    if(due <= today && !paidMonths[i]) return i;
+  }
+  return null;
+}
+function undoLastPaid(id){
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  if(!confirm('متأكد باغي تلغي الخلاص ديال هاد الشهر؟')) return;
+  const pm = s.paidMonths || [];
+  for(let i=TOTAL_MONTHS-1;i>=0;i--){
+    if(pm[i]){ pm[i] = false; break; }
+  }
+  save();
+  toast('تلغى الخلاص');
+  speak('تمت العملية، تلغى الخلاص');
+}
+function toggleMonth(id, idx){
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  if(!s.paidMonths) s.paidMonths = Array(TOTAL_MONTHS).fill(false);
+  s.paidMonths[idx] = !s.paidMonths[idx];
+  save();
+  toast(s.paidMonths[idx] ? 'تسجل الخلاص ✅' : 'تلغى الخلاص');
+  speak(s.paidMonths[idx] ? 'تمت العملية، تسجل الخلاص' : 'تمت العملية، تلغى الخلاص');
+}
+function deleteStudent(id){
+  if(!confirm('متأكد باغي تحذف هاد الطالب؟')) return;
+  students = students.filter(x=>x.id!==id);
+  revealedIds.delete(id);
+  save();
+  speak('تمت العملية، تحذف الطالب');
+}
+
+function openAdd(){
+  document.getElementById('fName').value = '';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('fAmount').value = 100;
+  document.getElementById('fPhone').value = '';
+  document.getElementById('addOverlay').classList.add('open');
+}
+function closeOverlay(id){ document.getElementById(id).classList.remove('open'); }
+function saveStudent(){
+  const name = document.getElementById('fName').value.trim();
+  const date = document.getElementById('fDate').value;
+  const amount = parseFloat(document.getElementById('fAmount').value) || 0;
+  const phone = document.getElementById('fPhone').value.trim();
+  if(!name || !date){ toast('عمر الاسم والتاريخ'); return; }
+  students.push({
+    id: uid(), name, startDate: date, monthlyAmount: amount, phone,
+    paidMonths: Array(TOTAL_MONTHS).fill(false)
+  });
+  save();
+  closeOverlay('addOverlay');
+  toast('تزاد الطالب ✅');
+}
+function normalizePhone(phone){
+  let p = (phone||'').replace(/[^\d+]/g,'');
+  if(p.startsWith('+')) p = p.slice(1);
+  if(p.startsWith('0')) p = '212' + p.slice(1);
+  else if(!p.startsWith('212') && p.length===9) p = '212' + p;
+  return p;
+}
+function editPhone(id){
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  const phone = prompt('رقم هاتف ولي الأمر (واتساب):', s.phone || '');
+  if(phone === null) return;
+  s.phone = phone.trim();
+  save();
+  toast(s.phone ? 'تسجل الرقم ✅' : 'تمسح الرقم');
+}
+function sendWhatsAppReminder(id){
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  if(!s.phone){
+    const phone = prompt('عمرك ماحطيتي رقم هاتف ولي الأمر — اكتبو دابا:');
+    if(!phone) return;
+    s.phone = phone.trim();
+    save();
+  }
+  const digits = normalizePhone(s.phone);
+  if(digits.length < 9){ toast('⚠️ الرقم ماشي صحيح'); return; }
+  const {paidCount, lateCount} = computeStatus(s);
+  const remaining = TOTAL_MONTHS - paidCount;
+  let msg;
+  if(lateCount > 0){
+    msg = `السلام، تذكير بخصوص ${s.name}: كاين ${lateCount} ${lateCount===1?'شهر متأخر':'أشهر متأخرين'} ما تخلصوش بعد، المبلغ الشهري ${s.monthlyAmount} درهم. ${remainingWord(remaining)}. شكرا 🙏`;
+  } else if(remaining <= 0){
+    msg = `السلام، تذكير بخصوص ${s.name}: الحمد لله كملات الدورة كاملة، بارك الله فيكم 🙏`;
+  } else {
+    msg = `السلام، تذكير بخصوص ${s.name}: الأداء متبوع لحد الآن، بارك الله فيكم. ${remainingWord(remaining)}.`;
+  }
+  const url = `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
+// ---- Notifications ----
+function toggleNotif(){
+  const btn = document.getElementById('notifBtn');
+  if(Notification.permission === 'granted'){
+    toast('التنبيهات مفعلة من قبل');
+    return;
+  }
+  Notification.requestPermission().then(p=>{
+    if(p === 'granted'){
+      btn.textContent = '🔔 التنبيهات مفعلة';
+      btn.classList.add('active');
+      toast('تفعلات التنبيهات ✅');
+      checkMonthlyReminder(true);
+    } else {
+      toast('ما تفعلاتش التنبيهات');
+    }
+  });
+}
+function updateNotifBtn(){
+  const btn = document.getElementById('notifBtn');
+  if(Notification.permission === 'granted'){
+    btn.textContent = '🔔 التنبيهات مفعلة';
+    btn.classList.add('active');
+  }
+}
+function checkMonthlyReminder(force){
+  if(Notification.permission !== 'granted') return;
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  if(!force && localStorage.getItem('lastReminderMonth') === monthKey) return;
+  const dueUnpaid = students.filter(s => getFirstUnpaidDueIndex(s) !== null);
+  if(dueUnpaid.length > 0){
+    try{
+      new Notification('تذكير شهري - دفوعات الطلبة', {
+        body: `عندك ${dueUnpaid.length} طالب خاصهم الأداء هاد الشهر`
+      });
+    }catch(e){}
+    localStorage.setItem('lastReminderMonth', monthKey);
+  }
+}
+
+// ---- Backup / Restore ----
+const AUTO_BACKUP_KEY = 'autoBackupEnabled';
+const LAST_AUTO_BACKUP_KEY = 'lastAutoBackupAt';
+
+function isAutoBackupOn(){ return localStorage.getItem(AUTO_BACKUP_KEY) === '1'; }
+function updateAutoBackupBtn(){
+  const btn = document.getElementById('autoBackupBtn');
+  if(!btn) return;
+  if(isAutoBackupOn()){
+    btn.textContent = '✅ مفعل';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = 'تفعيل';
+    btn.classList.remove('active');
+  }
+}
+function toggleAutoBackup(){
+  if(isAutoBackupOn()){
+    localStorage.setItem(AUTO_BACKUP_KEY, '0');
+    toast('تعطل الباكاب التلقائي');
+  } else {
+    localStorage.setItem(AUTO_BACKUP_KEY, '1');
+    toast('تفعل الباكاب التلقائي ✅');
+    downloadBackup(); // فورا أول باكاب
+    localStorage.setItem(LAST_AUTO_BACKUP_KEY, Date.now().toString());
+  }
+  updateAutoBackupBtn();
+}
+function autoBackupIfNeeded(){
+  if(!isAutoBackupOn()) return;
+  if(students.length === 0) return;
+  const last = parseInt(localStorage.getItem(LAST_AUTO_BACKUP_KEY) || '0', 10);
+  const now = Date.now();
+  // ماكيديرش باكاب كل ثانية - غير مرة كل 3 دقايق بحال بدلات شي حاجة
+  if(now - last < 3*60*1000) return;
+  downloadBackup();
+  localStorage.setItem(LAST_AUTO_BACKUP_KEY, now.toString());
+}
+const AUTO_EMAIL_KEY = 'autoEmailBackupEnabled';
+const LAST_AUTO_EMAIL_KEY = 'lastAutoEmailAt';
+function isAutoEmailOn(){ return localStorage.getItem(AUTO_EMAIL_KEY) === '1'; }
+function updateAutoEmailBtn(){
+  const btn = document.getElementById('autoEmailBtn');
+  if(!btn) return;
+  if(isAutoEmailOn()){
+    btn.textContent = '✅ مفعل';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = 'تفعيل';
+    btn.classList.remove('active');
+  }
+}
+function toggleAutoEmailBackup(){
+  if(isAutoEmailOn()){
+    localStorage.setItem(AUTO_EMAIL_KEY, '0');
+    toast('تعطل الصيفط التلقائي عبر Gmail');
+  } else {
+    localStorage.setItem(AUTO_EMAIL_KEY, '1');
+    toast('تفعل ✅ — غادي يحل Gmail تلقائيا مرة فاليوم، غير خاصك تدوس "إرسال" بيدك');
+    localStorage.setItem(LAST_AUTO_EMAIL_KEY, Date.now().toString());
+  }
+  updateAutoEmailBtn();
+}
+function autoEmailBackupIfNeeded(){
+  if(!isAutoEmailOn()) return;
+  if(students.length === 0) return;
+  const last = parseInt(localStorage.getItem(LAST_AUTO_EMAIL_KEY) || '0', 10);
+  const now = Date.now();
+  if(now - last < 24*60*60*1000) return; // مرة كل 24 ساعة
+  localStorage.setItem(LAST_AUTO_EMAIL_KEY, now.toString());
+  backupViaGmail();
+}
+function openSettings(){
+  document.getElementById('settingsOverlay').classList.add('open');
+  updateAutoBackupBtn();
+  updateAutoEmailBtn();
+}
+function backupViaGmail(){
+  const json = JSON.stringify(students, null, 2);
+  const subject = encodeURIComponent('نسخة احتياطية - تتبع دفوعات الطلبة');
+  const body = encodeURIComponent(
+    'هادي نسخة احتياطية ديال بيانات الطلبة. احتفظ بهاد الإيميل، وإيلا تمسحات البيانات، عاود لصق هاد النص فخانة "استرجاع" فالتطبيق.\n\n' + json
+  );
+  window.location.href = `mailto:achfri@gmail.com?subject=${subject}&body=${body}`;
+}
+async function shareBackup(){
+  const json = JSON.stringify(students, null, 2);
+  const filename = `backup-talaba-${new Date().toISOString().slice(0,10)}.json`;
+  if(navigator.share){
+    try{
+      if(navigator.canShare && typeof File !== 'undefined'){
+        const file = new File([json], filename, {type:'application/json'});
+        if(navigator.canShare({files:[file]})){
+          await navigator.share({files:[file], title:'نسخة احتياطية - تتبع دفوعات الطلبة'});
+          return;
+        }
+      }
+      await navigator.share({title:'نسخة احتياطية - تتبع دفوعات الطلبة', text: json});
+      return;
+    }catch(e){
+      if(e.name === 'AbortError') return; // المستخدم لغى المشاركة
+    }
+  }
+  downloadBackup();
+  toast('التطبيق ماعندوش مشاركة مباشرة - تحمل الملف، صيفطو يدويا');
+}
+function downloadBackup(){
+  const json = JSON.stringify(students, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup-talaba-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function applyRestoreData(data){
+  if(!Array.isArray(data)) throw new Error('bad format');
+  students = data;
+  save();
+  closeOverlay('settingsOverlay');
+  toast('ترجعات البيانات ✅');
+}
+function restoreBackup(){
+  const text = document.getElementById('restoreBox').value.trim();
+  if(!text){ toast('لصق النص أولا'); return; }
+  try{
+    applyRestoreData(JSON.parse(text));
+  }catch(e){
+    toast('النص ماشي صحيح ⚠️');
+  }
+}
+function restoreFromFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      applyRestoreData(JSON.parse(e.target.result));
+    }catch(err){
+      toast('الملف ماشي صحيح ⚠️');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ---- Voice payment logging ----
+function normalizeName(s){
+  return (s||'')
+    .replace(/[\u064B-\u0652]/g,'')
+    .replace(/[إأآا]/g,'ا')
+    .replace(/ى/g,'ي')
+    .replace(/ة/g,'ه')
+    .replace(/ـ/g,'')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+function findStudentByTranscript(transcript){
+  const norm = normalizeName(transcript);
+  const words = norm.split(' ').filter(Boolean);
+  let best = null, bestScore = 0;
+  for(const s of students){
+    const n = normalizeName(s.name);
+    if(!n) continue;
+    const nameWords = n.split(' ').filter(Boolean);
+    let score = 0;
+    if(norm.includes(n)){
+      score = 100 + n.length; // full name said, exact substring
+    } else if(nameWords.every(w => words.includes(w))){
+      score = 60 + n.length; // all parts of the name were said, different order
+    } else {
+      const matchedWords = nameWords.filter(w => words.includes(w));
+      if(matchedWords.length){
+        score = matchedWords.reduce((a,w)=>a+w.length, 0); // partial (e.g. first name only)
+      }
+    }
+    if(score > bestScore){ bestScore = score; best = s; }
+  }
+  return bestScore > 0 ? best : null;
+}
+// تطابق صارم: خاص الاسم الكامل (الاسم والنسب) يكون موجود بالضبط فالكلام
+function findStudentFullMatch(transcript){
+  const norm = normalizeName(transcript);
+  let best = null, bestScore = 0;
+  for(const s of students){
+    const n = normalizeName(s.name);
+    if(!n) continue;
+    if(norm.includes(n)){
+      const score = 100 + n.length;
+      if(score > bestScore){ bestScore = score; best = s; }
+    }
+  }
+  return best;
+}
+function voiceSearch(query){
+  const box = document.getElementById('searchBox');
+  box.value = query;
+  filterMode = 'all';
+  document.getElementById('backRow').style.display = 'none';
+  render();
+  const nq = normalizeName(query);
+  const matches = students.filter(s => normalizeName(s.name).includes(nq));
+  if(matches.length === 0){
+    speak('ما لقيت حتى طالب بهاد الاسم');
+    toast('ماكاين حتى نتيجة');
+  } else if(matches.length === 1){
+    speak(`لقيت طالب واحد: ${matches[0].name}`);
+  } else {
+    const names = matches.slice(0,5).map(s=>s.name).join('، ');
+    speak(`لقيت ${matches.length} طلبة: ${names}`);
+  }
+}
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  const voices = speechSynthesis.getVoices();
+  const arVoices = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith('ar'));
+  const maleHints = ['male','rjel','naayf','majed','hamed','fahd','tariq','خالد','رجل'];
+  const femaleHints = ['female','hoda','salma','laila','zariah','امرأة'];
+  const maleVoice = arVoices.find(v => maleHints.some(h => v.name.toLowerCase().includes(h)))
+    || arVoices.find(v => !femaleHints.some(h => v.name.toLowerCase().includes(h)))
+    || arVoices[0];
+  if(maleVoice) u.voice = maleVoice;
+  u.lang = maleVoice ? maleVoice.lang : 'ar-SA';
+  u.rate = 0.95;
+  u.pitch = 0.75; // deeper pitch so it reads more like a man's voice
+  speechSynthesis.speak(u);
+}
+function remainingWord(n){
+  if(n<=0) return 'كمل الدورة كاملة ✓';
+  if(n===1) return 'باقي له شهر واحد';
+  if(n===2) return 'باقي له شهرين';
+  return 'باقي له '+n+' أشهر';
+}
+function lateWord(n){
+  if(n<=0) return 'ماعندوش حتى شهر متأخر، كلشي متبوع ✓';
+  if(n===1) return 'الباقي شهر واحد ما تخلصش';
+  if(n===2) return 'الباقي شهرين ما تخلصوش';
+  return 'الباقي '+n+' أشهر ما تخلصوش';
+}
+function registerVoicePayment(student){
+  const paidMonthsArr = student.paidMonths || Array(TOTAL_MONTHS).fill(false);
+  if(paidMonthsArr.filter(Boolean).length >= TOTAL_MONTHS){
+    speak(`${student.name} كمل الدورة كاملة`);
+    toast(`🏁 ${student.name} كمل الدورة`);
+    return;
+  }
+  let idx = getFirstUnpaidDueIndex(student);
+  if(idx === null){
+    for(let i=0;i<TOTAL_MONTHS;i++){ if(!paidMonthsArr[i]){ idx=i; break; } }
+  }
+  if(idx === null) return;
+  toggleMonth(student.id, idx);
+  const {lateCount} = computeStatus(student);
+  const msg = `تسجل الخلاص ديال ${student.name}، ${lateWord(lateCount)}`;
+  speak(msg);
+  toast(msg);
+}
+function handleVoiceTranscript(transcript){
+  const norm = normalizeName(transcript);
+  const payTriggers = ['خالص','خلاص','خلص','خلصت','خلصات'];
+
+  const payHit = payTriggers.find(t => norm.includes(t));
+  if(payHit){
+    const namePart = norm.replace(payHit, '').trim();
+    const student = findStudentFullMatch(namePart || norm);
+    if(!student){
+      toast(`سمعت «${transcript}» — قول الاسم كامل (الاسم والنسب) مع كلمة خالص`);
+      speak('ما لقيتش هاد الطالب، قول الاسم كامل مع كلمة خالص');
+      return;
+    }
+    registerVoicePayment(student);
+    return;
+  }
+
+  // بلا "خالص" = بحث مباشر بالاسم لي تقال
+  voiceSearch(transcript);
+}
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceRecognition = null;
+let isListening = false;
+let manualStop = false;
+if(SpeechRecognitionCtor){
+  voiceRecognition = new SpeechRecognitionCtor();
+  voiceRecognition.lang = 'ar-MA';
+  voiceRecognition.continuous = true;
+  voiceRecognition.interimResults = true;
+  voiceRecognition.onstart = ()=>{
+    isListening = true;
+    const fab = document.getElementById('micFab');
+    fab.classList.add('listening');
+    fab.title = 'دوس باش توقف';
+    toast('🎤 قول اسم الطالب للبحث، ولا الاسم كامل مع "خالص" — الميكرو غايقفل وحدو بعد ما يسمعك');
+  };
+  voiceRecognition.onend = ()=>{
+    isListening = false;
+    const fab = document.getElementById('micFab');
+    fab.classList.remove('listening');
+    fab.title = 'سجل خلاص بالصوت';
+    if(!manualStop){
+      // browser closed the mic on its own (silence/timeout) - keep listening
+      try{ voiceRecognition.start(); }catch(e){}
+    }
+  };
+  voiceRecognition.onerror = (e)=>{
+    if(e.error === 'no-speech'){ return; } // normal during pauses, keep listening
+    document.getElementById('micFab').classList.remove('listening');
+    manualStop = true; // stop auto-restart loop on real errors
+    const reasons = {
+      'audio-capture': '⚠️ ما لقيتش ميكرو فهاد الجهاز',
+      'not-allowed': '⚠️ الإذن ديال الميكرو مرفوض — عاود دوس ⚙️ حدا رابط الموقع فالمتصفح وفعّلو',
+      'network': '⚠️ خاصك الإنترنت باش يخدم التعرف الصوتي',
+      'service-not-allowed': '⚠️ الصوت ماخدامش هنا — جرب من رابط https ف Chrome'
+    };
+    toast(reasons[e.error] || ('⚠️ الصوت توقف: ' + e.error));
+  };
+  voiceRecognition.onresult = (e)=>{
+    let interim = '';
+    let final = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      const t = e.results[i][0].transcript;
+      if(e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    showCaption(interim || final);
+    if(final.trim()){
+      handleVoiceTranscript(final.trim());
+      manualStop = true; // نفّذنا الأمر - وقف الميكرو تلقائيا، ماشي كيبقى خدام
+      try{ voiceRecognition.stop(); }catch(e){}
+      setTimeout(hideCaption, 1800);
+    }
+  };
+}
+function showCaption(text){
+  const box = document.getElementById('captionBox');
+  box.textContent = text;
+  box.classList.add('show');
+}
+function hideCaption(){
+  const box = document.getElementById('captionBox');
+  box.classList.remove('show');
+  box.textContent = '';
+}
+function textFallback(){
+  const name = prompt('اكتب سمية الطالب باش نسجلو خالص:');
+  if(name) handleVoiceTranscript(name);
+}
+function startVoicePayment(){
+  if(!voiceRecognition){
+    textFallback();
+    return;
+  }
+  if(isListening){
+    manualStop = true;
+    voiceRecognition.stop();
+    toast('توقف التسجيل الصوتي');
+    hideCaption();
+    return;
+  }
+  manualStop = false;
+  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+      stream.getTracks().forEach(t=>t.stop());
+      try{ voiceRecognition.start(); }catch(e){ /* already running */ }
+    }).catch(err=>{
+      if(err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'){
+        toast('⚠️ الإذن ديال الميكرو مرفوض — فعّلو من إعدادات الموقع فالمتصفح');
+      } else if(err.name === 'NotFoundError'){
+        toast('⚠️ ما لقيتش ميكرو فهاد الجهاز');
+      } else {
+        toast('⚠️ الميكرو ماخدامش: ' + err.name);
+      }
+    });
+  } else {
+    try{ voiceRecognition.start(); }catch(e){ /* already running */ }
+  }
+}
+
+// ---- PIN lock ----
+const APP_PIN = '1982';
+let pinEntry = '';
+function updateLockDots(){
+  const dots = document.querySelectorAll('#lockDots .lock-dot');
+  dots.forEach((d,i)=> d.classList.toggle('filled', i < pinEntry.length));
+}
+function pinPress(digit){
+  if(pinEntry.length >= 4) return;
+  pinEntry += digit;
+  updateLockDots();
+  if(pinEntry.length === 4){
+    if(pinEntry === APP_PIN){
+      sessionStorage.setItem('appUnlocked', '1');
+      document.getElementById('lockScreen').classList.add('hidden');
+    } else {
+      const box = document.getElementById('lockDots');
+      box.style.animation = 'none';
+      setTimeout(()=>{ box.style.animation = 'shake .35s'; }, 10);
+      setTimeout(()=>{ pinEntry=''; updateLockDots(); }, 400);
+    }
+  }
+}
+function pinBackspace(){ pinEntry = pinEntry.slice(0,-1); updateLockDots(); }
+function pinClear(){ pinEntry = ''; updateLockDots(); }
+function checkLock(){
+  if(sessionStorage.getItem('appUnlocked') === '1'){
+    document.getElementById('lockScreen').classList.add('hidden');
+  }
+}
+checkLock();
+
+// init
+updateNotifBtn();
+updateAutoBackupBtn();
+updateAutoEmailBtn();
+render();
+checkMonthlyReminder(false);
+setInterval(()=>checkMonthlyReminder(false), 1000*60*60*6); // recheck every 6h while app open
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkMonthlyReminder(false);
+});
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
