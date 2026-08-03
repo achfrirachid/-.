@@ -1,0 +1,11 @@
+{
+  "appId": "com.rachid.talamide",
+  "appName": "تتبع دفوعات الطلبة",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
