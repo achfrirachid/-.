@@ -1,7 +1,7 @@
 {
   "appId": "com.rachid.talamide",
   "appName": "تتبع دفوعات الطلبة",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
