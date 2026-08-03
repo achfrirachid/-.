@@ -12,6 +12,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare web assets
+        run: |
+          mkdir -p www
+          cp index.html www/
+          cp manifest.json www/ 2>/dev/null || true
+          cp sw.js www/ 2>/dev/null || true
+          cp icon-*.png www/ 2>/dev/null || true
+          cp favicon-32.png www/ 2>/dev/null || true
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -31,7 +40,7 @@ jobs:
           if [ -f "google-services.json" ]; then
             cp google-services.json android/app/google-services.json
           else
-            echo "::error::google-services.json ماكاينش فجذر المشروع. زيدو من Firebase Console وحطو فجذر repo."
+            echo "::error::google-services.json ماكاينش فجذر المشروع."
             exit 1
           fi
 
