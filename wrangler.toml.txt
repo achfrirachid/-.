@@ -2,10 +2,10 @@ name = "talaba-backup"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
-# ربط KV namespace — بدل "id" بالـ ID اللي غيعطيك Cloudflare بعد ما تدير الـ namespace
+# ربط KV namespace
 [[kv_namespaces]]
 binding = "BACKUP_KV"
-id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+id = "6962ab9518c34cbb8dd83d1870f074c3"
 
 # ملاحظة: SECRET_TOKEN خاصو يتزاد كـ Secret من Dashboard
 # (Settings → Variables and Secrets) وماشي هنا فهاد الملف
