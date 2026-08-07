@@ -1,0 +1,19 @@
+name = "backup-proxy"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# ربط الـ Worker بـ R2 Bucket (لـ Cloudflare backup + تخزين message_id ديال Telegram)
+[[r2_buckets]]
+binding = "BACKUP_BUCKET"
+bucket_name = "attendance-backups"   # خلقه فـ R2 قبل النشر
+
+# ⚠️ الأسرار (Secrets) — ماكيتحطوش هنا، خاصك تديرهم عبر الداشبورد أو الأوامر تحت:
+#   wrangler secret put PROXY_SECRET
+#   wrangler secret put GH_TOKEN
+#   wrangler secret put GH_REPO
+#   wrangler secret put GH_PATH
+#   wrangler secret put GH_BRANCH
+#   wrangler secret put DBX_TOKEN
+#   wrangler secret put DBX_PATH
+#   wrangler secret put TG_BOT_TOKEN
+#   wrangler secret put TG_CHAT_ID
