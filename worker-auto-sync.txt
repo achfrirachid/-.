@@ -1,0 +1,707 @@
+/**
+ * Cloudflare Worker — Student Tracker automatic backup proxy
+ *
+ * Services:
+ *   Telegram + GitHub + Dropbox + Google Drive + Google Sheet
+ *
+ * The browser only talks to this Worker. Real credentials stay in
+ * Cloudflare Environment Variables / Secrets.
+ *
+ * Required environment variables:
+ *   PROXY_SECRET
+ *   TG_BOT_TOKEN
+ *   TG_CHAT_ID
+ *   GH_TOKEN
+ *   GH_REPO
+ *   GH_PATH            optional, default backup.json
+ *   GH_BRANCH          optional, default main
+ *   DBX_TOKEN
+ *   DBX_PATH           optional, default /backup.json
+ *   GOOGLE_SA_EMAIL
+ *   GOOGLE_SA_PRIVATE_KEY
+ *   DRIVE_FOLDER_ID    optional
+ *   SHEET_ID
+ *
+ * Recommended:
+ *   Set all five services once in Cloudflare. After that the app does
+ *   not ask the user to log in to each service on every device.
+ *
+ * Endpoints:
+ *   POST /backup/upload  -> sends one backup to all five services
+ *   GET  /backup/fetch   -> reads the first available backup
+ *
+ * The individual endpoints are also kept for compatibility with the
+ * existing index.html:
+ *   /telegram/upload|fetch
+ *   /github/upload|fetch
+ *   /dropbox/upload|fetch
+ *   /drive/upload|fetch
+ *   /sheet/upload|fetch
+ */
+
+function withCors(resp) {
+  const headers = new Headers(resp.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  return new Response(resp.body, { status: resp.status, headers });
+}
+
+function json(obj, status = 200) {
+  return withCors(new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' }
+  }));
+}
+
+function checkAuth(request, env) {
+  const auth = request.headers.get('Authorization') || '';
+  const expected = 'Bearer ' + (env.PROXY_SECRET || '');
+  return !!env.PROXY_SECRET && auth === expected;
+}
+
+async function readData(request) {
+  const body = await request.json();
+  return body && body.data !== undefined ? body.data : body;
+}
+
+function serviceStatus(env) {
+  return {
+    telegram: !!(env.TG_BOT_TOKEN && env.TG_CHAT_ID),
+    github: !!(env.GH_TOKEN && env.GH_REPO),
+    dropbox: !!env.DBX_TOKEN,
+    drive: !!(env.GOOGLE_SA_EMAIL && env.GOOGLE_SA_PRIVATE_KEY),
+    sheet: !!(env.GOOGLE_SA_EMAIL && env.GOOGLE_SA_PRIVATE_KEY && env.SHEET_ID)
+  };
+}
+
+/* ---------------- Telegram ---------------- */
+
+async function tgUploadData(data, env) {
+  const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
+  if (!token || !chatId) throw new Error('TG_BOT_TOKEN/TG_CHAT_ID ناقصين');
+
+  const content = JSON.stringify(data, null, 2);
+  const form = new FormData();
+  form.append('chat_id', chatId);
+  form.append('document', new Blob([content], { type: 'application/json' }), 'backup.json');
+  form.append('caption', '📦 نسخة احتياطية محدثة');
+
+  const sendRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    method: 'POST',
+    body: form
+  });
+  const sendJson = await sendRes.json();
+  if (!sendJson.ok) throw new Error(sendJson.description || 'Telegram send failed');
+
+  const msgId = sendJson.result.message_id;
+
+  // Pinning is best-effort. Backup upload remains successful even if
+  // the bot is not allowed to pin messages.
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/pinChatMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: msgId,
+        disable_notification: true
+      })
+    });
+  } catch (_) {}
+
+  return { ok: true, message_id: msgId };
+}
+
+async function tgUpload(request, env) {
+  return json(await tgUploadData(await readData(request), env));
+}
+
+async function tgFetch(env) {
+  const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
+  if (!token || !chatId) return json({ ok: false, data: null, detail: 'TG credentials ناقصين' }, 500);
+
+  const chatRes = await fetch(
+    `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(chatId)}`
+  );
+  const chatJson = await chatRes.json();
+  const pinned = chatJson.result && chatJson.result.pinned_message;
+  const doc = pinned && pinned.document;
+  if (!doc) return json({ ok: false, data: null });
+
+  const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${doc.file_id}`);
+  const fileJson = await fileRes.json();
+  const filePath = fileJson.result && fileJson.result.file_path;
+  if (!filePath) return json({ ok: false, data: null });
+
+  const contentRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+  if (!contentRes.ok) return json({ ok: false, data: null });
+
+  const data = await contentRes.json();
+  return json({ ok: true, data });
+}
+
+/* ---------------- GitHub ---------------- */
+
+function ghHeaders(env) {
+  return {
+    'Authorization': `Bearer ${env.GH_TOKEN}`,
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'student-payment-tracker-worker'
+  };
+}
+
+function ghApiUrl(env) {
+  const path = env.GH_PATH || 'backup.json';
+  return `https://api.github.com/repos/${env.GH_REPO}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
+}
+
+function utf8ToB64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function b64ToUtf8(str) {
+  const binary = atob(str.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+async function ghUploadData(data, env) {
+  if (!env.GH_TOKEN || !env.GH_REPO) throw new Error('GH_TOKEN/GH_REPO ناقصين');
+
+  const branch = env.GH_BRANCH || 'main';
+  const url = ghApiUrl(env) + `?ref=${encodeURIComponent(branch)}`;
+
+  let sha = null;
+  const getRes = await fetch(url, { headers: ghHeaders(env) });
+  if (getRes.ok) {
+    const getJson = await getRes.json();
+    sha = getJson.sha || null;
+  }
+
+  const body = {
+    message: 'تحديث النسخة الاحتياطية',
+    content: utf8ToB64(JSON.stringify(data, null, 2)),
+    branch
+  };
+  if (sha) body.sha = sha;
+
+  const putRes = await fetch(ghApiUrl(env), {
+    method: 'PUT',
+    headers: { ...ghHeaders(env), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const putJson = await putRes.json();
+  if (!putRes.ok) throw new Error(putJson.message || 'GitHub upload failed');
+
+  return { ok: true };
+}
+
+async function ghUpload(request, env) {
+  return json(await ghUploadData(await readData(request), env));
+}
+
+async function ghFetch(env) {
+  if (!env.GH_TOKEN || !env.GH_REPO) return json({ ok: false, data: null }, 500);
+
+  const branch = env.GH_BRANCH || 'main';
+  const res = await fetch(
+    ghApiUrl(env) + `?ref=${encodeURIComponent(branch)}`,
+    { headers: ghHeaders(env) }
+  );
+  if (!res.ok) return json({ ok: false, data: null });
+
+  const j = await res.json();
+  try {
+    const data = JSON.parse(b64ToUtf8(j.content));
+    return json({ ok: true, data });
+  } catch (_) {
+    return json({ ok: false, data: null });
+  }
+}
+
+/* ---------------- Dropbox ---------------- */
+
+async function dbxUploadData(data, env) {
+  if (!env.DBX_TOKEN) throw new Error('DBX_TOKEN ناقص');
+  const path = env.DBX_PATH || '/backup.json';
+
+  const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.DBX_TOKEN}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({
+        path,
+        mode: 'overwrite',
+        mute: true
+      })
+    },
+    body: JSON.stringify(data, null, 2)
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(t.slice(0, 300) || 'Dropbox upload failed');
+  }
+  return { ok: true };
+}
+
+async function dbxUpload(request, env) {
+  return json(await dbxUploadData(await readData(request), env));
+}
+
+async function dbxFetch(env) {
+  if (!env.DBX_TOKEN) return json({ ok: false, data: null }, 500);
+  const path = env.DBX_PATH || '/backup.json';
+
+  const res = await fetch('https://content.dropboxapi.com/2/files/download', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.DBX_TOKEN}`,
+      'Dropbox-API-Arg': JSON.stringify({ path })
+    }
+  });
+  if (!res.ok) return json({ ok: false, data: null });
+
+  try {
+    const data = await res.json();
+    return json({ ok: true, data });
+  } catch (_) {
+    return json({ ok: false, data: null });
+  }
+}
+
+/* ---------------- Google JWT ---------------- */
+
+function b64urlEncode(input) {
+  let str;
+  if (typeof input === 'string') {
+    str = input;
+  } else {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    str = binary;
+  }
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function pemToArrayBuffer(pem) {
+  const clean = String(pem || '')
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s/g, '');
+  const raw = atob(clean);
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buf;
+}
+
+async function getGoogleAccessToken(env, scope) {
+  if (!env.GOOGLE_SA_EMAIL || !env.GOOGLE_SA_PRIVATE_KEY) {
+    throw new Error('Google Service Account credentials ناقصين');
+  }
+
+  const privateKeyPem = String(env.GOOGLE_SA_PRIVATE_KEY).replace(/\\n/g, '\n');
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToArrayBuffer(privateKeyPem),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const claim = {
+    iss: env.GOOGLE_SA_EMAIL,
+    scope,
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  };
+
+  const unsigned =
+    b64urlEncode(JSON.stringify(header)) + '.' +
+    b64urlEncode(JSON.stringify(claim));
+
+  const sig = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+
+  const jwt = unsigned + '.' + b64urlEncode(sig);
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:
+      `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}` +
+      `&assertion=${encodeURIComponent(jwt)}`
+  });
+
+  const j = await res.json();
+  if (!res.ok || !j.access_token) {
+    throw new Error('Google auth failed: ' + JSON.stringify(j));
+  }
+  return j.access_token;
+}
+
+/* ---------------- Google Drive ---------------- */
+
+async function driveFindFileId(token, env) {
+  const parts = [
+    `name='backup.json'`,
+    `trashed=false`
+  ];
+  if (env.DRIVE_FOLDER_ID) {
+    parts.push(`'${env.DRIVE_FOLDER_ID}' in parents`);
+  }
+
+  const q = encodeURIComponent(parts.join(' and '));
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&pageSize=10`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!res.ok) {
+    throw new Error('Drive search failed: ' + (await res.text()).slice(0, 300));
+  }
+
+  const j = await res.json();
+  return (j.files && j.files[0] && j.files[0].id) || null;
+}
+
+async function driveUploadData(data, env) {
+  const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/drive');
+  const fileId = await driveFindFileId(token, env);
+
+  const metadata = { name: 'backup.json', mimeType: 'application/json' };
+  if (!fileId && env.DRIVE_FOLDER_ID) metadata.parents = [env.DRIVE_FOLDER_ID];
+
+  const content = JSON.stringify(data, null, 2);
+  const boundary = 'wkr_boundary_' + crypto.randomUUID();
+
+  const body =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    `${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Type: application/json\r\n\r\n` +
+    `${content}\r\n` +
+    `--${boundary}--`;
+
+  const url = fileId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+  const res = await fetch(url, {
+    method: fileId ? 'PATCH' : 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`
+    },
+    body
+  });
+
+  if (!res.ok) {
+    throw new Error('Drive upload failed: ' + (await res.text()).slice(0, 500));
+  }
+  return { ok: true };
+}
+
+async function driveUpload(request, env) {
+  return json(await driveUploadData(await readData(request), env));
+}
+
+async function driveFetch(env) {
+  try {
+    const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/drive');
+    const fileId = await driveFindFileId(token, env);
+    if (!fileId) return json({ ok: false, data: null });
+
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return json({ ok: false, data: null });
+
+    return json({ ok: true, data: await res.json() });
+  } catch (e) {
+    return json({ ok: false, data: null, detail: String(e) }, 500);
+  }
+}
+
+/* ---------------- Google Sheet ---------------- */
+
+async function sheetUploadData(data, env) {
+  if (!env.SHEET_ID) throw new Error('SHEET_ID ناقص');
+
+  const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/spreadsheets');
+  const range = 'Backup!A1';
+
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(env.SHEET_ID)}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        range,
+        majorDimension: 'ROWS',
+        values: [[JSON.stringify(data)]]
+      })
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error('Sheet upload failed: ' + (await res.text()).slice(0, 500));
+  }
+  return { ok: true };
+}
+
+async function sheetUpload(request, env) {
+  return json(await sheetUploadData(await readData(request), env));
+}
+
+async function sheetFetch(env) {
+  try {
+    if (!env.SHEET_ID) return json({ ok: false, data: null }, 500);
+
+    const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/spreadsheets');
+    const range = 'Backup!A1';
+
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(env.SHEET_ID)}/values/${encodeURIComponent(range)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return json({ ok: false, data: null });
+
+    const j = await res.json();
+    const raw = j.values && j.values[0] && j.values[0][0];
+    if (!raw) return json({ ok: false, data: null });
+
+    try {
+      return json({ ok: true, data: JSON.parse(raw) });
+    } catch (_) {
+      return json({ ok: false, data: null });
+    }
+  } catch (e) {
+    return json({ ok: false, data: null, detail: String(e) }, 500);
+  }
+}
+
+/* ---------------- Unified automatic backup ---------------- */
+
+async function backupUpload(request, env) {
+  const data = await readData(request);
+
+  const jobs = {
+    telegram: () => tgUploadData(data, env),
+    github: () => ghUploadData(data, env),
+    dropbox: () => dbxUploadData(data, env),
+    drive: () => driveUploadData(data, env),
+    sheet: () => sheetUploadData(data, env)
+  };
+
+  const entries = Object.entries(jobs);
+  const results = await Promise.all(
+    entries.map(async ([name, fn]) => {
+      try {
+        const result = await fn();
+        return [name, { ok: true, ...result }];
+      } catch (e) {
+        return [name, { ok: false, detail: String(e) }];
+      }
+    })
+  );
+
+  const status = Object.fromEntries(results);
+  const okCount = Object.values(status).filter(x => x.ok).length;
+
+  return json({
+    ok: okCount > 0,
+    saved: okCount,
+    total: 5,
+    status
+  }, okCount === 5 ? 200 : 207);
+}
+
+async function backupFetch(env) {
+  // Prefer Drive/Sheet first, then Dropbox/GitHub/Telegram.
+  // This avoids relying on Telegram pinning as the primary restore source.
+  const readers = [
+    ['drive', () => driveReadData(env)],
+    ['sheet', () => sheetReadData(env)],
+    ['dropbox', () => dbxReadData(env)],
+    ['github', () => ghReadData(env)],
+    ['telegram', () => tgReadData(env)]
+  ];
+
+  const errors = {};
+
+  for (const [name, fn] of readers) {
+    try {
+      const data = await fn();
+      if (Array.isArray(data)) {
+        return json({ ok: true, source: name, data });
+      }
+    } catch (e) {
+      errors[name] = String(e);
+    }
+  }
+
+  return json({ ok: false, data: null, errors }, 404);
+}
+
+/* Raw readers used by unified restore. */
+
+async function driveReadData(env) {
+  const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/drive');
+  const fileId = await driveFindFileId(token, env);
+  if (!fileId) return null;
+
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function sheetReadData(env) {
+  if (!env.SHEET_ID) return null;
+
+  const token = await getGoogleAccessToken(env, 'https://www.googleapis.com/auth/spreadsheets');
+  const range = 'Backup!A1';
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(env.SHEET_ID)}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return null;
+
+  const j = await res.json();
+  const raw = j.values && j.values[0] && j.values[0][0];
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function dbxReadData(env) {
+  if (!env.DBX_TOKEN) return null;
+  const path = env.DBX_PATH || '/backup.json';
+
+  const res = await fetch('https://content.dropboxapi.com/2/files/download', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.DBX_TOKEN}`,
+      'Dropbox-API-Arg': JSON.stringify({ path })
+    }
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function ghReadData(env) {
+  if (!env.GH_TOKEN || !env.GH_REPO) return null;
+
+  const branch = env.GH_BRANCH || 'main';
+  const res = await fetch(
+    ghApiUrl(env) + `?ref=${encodeURIComponent(branch)}`,
+    { headers: ghHeaders(env) }
+  );
+  if (!res.ok) return null;
+
+  const j = await res.json();
+  return JSON.parse(b64ToUtf8(j.content));
+}
+
+async function tgReadData(env) {
+  const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
+  if (!token || !chatId) return null;
+
+  const chatRes = await fetch(
+    `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(chatId)}`
+  );
+  const chatJson = await chatRes.json();
+  const doc = chatJson.result?.pinned_message?.document;
+  if (!doc) return null;
+
+  const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${doc.file_id}`);
+  const fileJson = await fileRes.json();
+  const filePath = fileJson.result?.file_path;
+  if (!filePath) return null;
+
+  const contentRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+  if (!contentRes.ok) return null;
+
+  return await contentRes.json();
+}
+
+/* ---------------- Router ---------------- */
+
+export default {
+  async fetch(request, env) {
+    if (request.method === 'OPTIONS') {
+      return withCors(new Response(null, { status: 204 }));
+    }
+
+    if (!checkAuth(request, env)) {
+      return json({ ok: false, detail: 'unauthorized' }, 401);
+    }
+
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    try {
+      if (path === '/health' && request.method === 'GET') {
+        return json({
+          ok: true,
+          services: serviceStatus(env)
+        });
+      }
+
+      // One automatic call -> all five services.
+      if (path === '/backup/upload' && request.method === 'POST') {
+        return await backupUpload(request, env);
+      }
+
+      // One automatic restore -> first available cloud backup.
+      if (path === '/backup/fetch' && request.method === 'GET') {
+        return await backupFetch(env);
+      }
+
+      // Existing routes — kept so the current index.html continues to work.
+      if (path === '/telegram/upload' && request.method === 'POST') return await tgUpload(request, env);
+      if (path === '/telegram/fetch' && request.method === 'GET') return await tgFetch(env);
+
+      if (path === '/github/upload' && request.method === 'POST') return await ghUpload(request, env);
+      if (path === '/github/fetch' && request.method === 'GET') return await ghFetch(env);
+
+      if (path === '/dropbox/upload' && request.method === 'POST') return await dbxUpload(request, env);
+      if (path === '/dropbox/fetch' && request.method === 'GET') return await dbxFetch(env);
+
+      if (path === '/drive/upload' && request.method === 'POST') return await driveUpload(request, env);
+      if (path === '/drive/fetch' && request.method === 'GET') return await driveFetch(env);
+
+      if (path === '/sheet/upload' && request.method === 'POST') return await sheetUpload(request, env);
+      if (path === '/sheet/fetch' && request.method === 'GET') return await sheetFetch(env);
+
+      return json({ ok: false, detail: 'not found' }, 404);
+    } catch (e) {
+      return json({ ok: false, detail: String(e) }, 500);
+    }
+  }
+};
