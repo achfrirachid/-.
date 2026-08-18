@@ -1,0 +1,12 @@
+{
+  "appId": "com.achfrirachid.tatabbou",
+  "appName": "تتبع الطلبة",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
