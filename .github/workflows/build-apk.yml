@@ -29,6 +29,12 @@ jobs:
       - name: Add Android platform (first run only, safe to repeat)
         run: npx cap add android || true
 
+      - name: Ensure internet permissions are declared
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' "$MANIFEST" || \
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
+
       - name: Sync web assets into native project
         run: npx cap sync android
 
