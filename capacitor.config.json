@@ -8,5 +8,10 @@
   },
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
   }
 }
