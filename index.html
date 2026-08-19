@@ -868,6 +868,21 @@ waToken: 4e3ff8f3e82a4afe93bbfceb52a2f305b15a3e341af3407c8c" style="min-height:1
 </div>
 
 <script>
+// ⭐ تصحيح: نقلنا تعريف هاد المفاتيح لبداية الملف باش تكون جاهزة قبل أي استعمال ليها،
+// كانت السبب فـ خطأ "Cannot access before initialization" فالتطبيق الأصلي (native).
+const K_C4 = 'tgBotToken';
+const K_C5 = 'tgChatId';
+const K_C6 = 'tgAdminBotTokenV1';
+const K_C7 = 'tgAdminChatIdV1';
+const K_C8_TG_AICHA_CHAT = 'tgAichaChatIdV2';
+const GH_TOKEN_KEY = 'ghToken';
+const GH_REPO_KEY = 'ghRepo';
+const GH_PATH_KEY = 'ghPath';
+const GH_BRANCH_KEY = 'ghBranch';
+const WA_ID_INSTANCE_KEY = 'waIdInstance';
+const WA_TOKEN_KEY = 'waToken';
+const WA_ADMIN_ID_INSTANCE_KEY = 'waAdminIdInstanceV1';
+const WA_ADMIN_TOKEN_KEY = 'waAdminTokenV1';
 const _obfuscationSalt = '秘密码保护';
 function _decodeObfuscated(data){ return data.map((n,i)=>String.fromCharCode(n ^ _obfuscationSalt.charCodeAt(i % _obfuscationSalt.length) ^ ((i * 17) & 255))).join(''); }
 // ⭐ تشفير 3 طبقات (XOR+موضع، دوران بتات، XOR برموز) لأسرار التفعيل التلقائي المشترك
@@ -2558,12 +2573,31 @@ function speak(text){
     window.speechSynthesis.speak(utter);
   }catch(e){ /* الصوت اختياري، ماشي مشكل إلا فشل */ }
 }
+// AudioContext وحدة مشتركة كتبقى محلولة (مافيهاش close) — فـ WebView ديال أندرويد كل AudioContext
+// جديدة كتبدا "suspended" ولازمها resume() بعد جيستشر ديال المستخدم، وخلقها مرارا كيقدر يفشل بصمت.
+let sharedAudioCtx = null;
+function getAudioCtx(){
+  try{
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx) return null;
+    if(!sharedAudioCtx || sharedAudioCtx.state === 'closed') sharedAudioCtx = new AudioCtx();
+    if(sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume().catch(()=>{});
+    return sharedAudioCtx;
+  }catch(e){ return null; }
+}
+// نحاولو نفكو الـ AudioContext بأول لمسة/كليك فالتطبيق باش يكون جاهز مباشرة
+['click','touchstart'].forEach(evt=>{
+  document.addEventListener(evt, function unlockAudioOnce(){
+    getAudioCtx();
+    document.removeEventListener('click', unlockAudioOnce);
+    document.removeEventListener('touchstart', unlockAudioOnce);
+  }, {once:true, passive:true});
+});
 function playCancelTone(){
   // نغمة قصيرة هابطة (مختلفة عن نغمة النجاح الصاعدة) لتأكيد إلغاء الخلاص
   try{
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if(!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getAudioCtx();
+    if(!ctx) return;
     const now = ctx.currentTime;
     const notes = [[440,0],[349.23,0.09]];
     notes.forEach(([freq, delay])=>{
@@ -2580,14 +2614,12 @@ function playCancelTone(){
       osc.start(start);
       osc.stop(start + 0.36);
     });
-    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 700);
   }catch(e){ /* الصوت اختياري، ماشي مشكل إلا فشل */ }
 }
 function playSuccessChime(){
   try{
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if(!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getAudioCtx();
+    if(!ctx) return;
     const now = ctx.currentTime;
     // جرس بثلاث نغمات صاعدة (دو-مي-صول) بحال "تشين" ديال نجاح العملية
     const notes = [[523.25,0],[659.25,0.09],[783.99,0.18]];
@@ -2605,7 +2637,6 @@ function playSuccessChime(){
       osc.start(start);
       osc.stop(start + 0.46);
     });
-    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 900);
   }catch(e){ /* الصوت اختياري، ماشي مشكل إلا فشل */ }
 }
 function toggleMonth(id, idx){
@@ -3720,26 +3751,29 @@ async function buildReceiptCanvas(s){
   ctx.setLineDash([]);
   y += 30;
 
+  // الخاتم كيعكس الحالة الحقيقية: "PAID" غير إلى خلصو كل الأشهر، وإلا كيبان "أداء جزئي"
+  const stampFullyPaid = unpaidCount === 0;
+  const stampColor = stampFullyPaid ? '#1a56db' : '#b4472b';
   const stampR = 48;
   const stampCX = W/2, stampCY = y + stampR;
   ctx.save();
   ctx.translate(stampCX, stampCY);
   ctx.rotate(-8 * Math.PI/180);
   ctx.globalAlpha = .92;
-  ctx.strokeStyle = '#1a56db';
+  ctx.strokeStyle = stampColor;
   ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.arc(0,0,stampR,0,Math.PI*2); ctx.stroke();
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(0,0,stampR-7,0,Math.PI*2); ctx.stroke();
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#1a56db';
+  ctx.fillStyle = stampColor;
   ctx.font = `bold 10px ${FONT}`;
   ctx.fillText('جمعية المعرفة', 0, -stampR+24);
-  ctx.font = `bold 14px ${FONT}`;
-  ctx.fillText('تم الدفع نقدا', 0, 6);
+  ctx.font = `bold 13px ${FONT}`;
+  ctx.fillText(stampFullyPaid ? 'تم الدفع كاملا' : `متبقي ${unpaidCount} ${unpaidCount===1?'شهر':'أشهر'}`, 0, 6);
   ctx.font = `bold 9px ${FONT}`;
   ctx.direction = 'ltr';
-  ctx.fillText('CASH • PAID', 0, stampR-18);
+  ctx.fillText(stampFullyPaid ? 'FULLY PAID' : 'PARTIAL PAYMENT', 0, stampR-18);
   ctx.direction = 'rtl';
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -3770,7 +3804,7 @@ async function sendReceiptImage(id){
   const digits = s.phone ? normalizePhone(s.phone) : '';
 
   let chatWin = null;
-  if(digits && digits.length >= 9){
+  if(digits && digits.length >= 9 && !isNativeApp()){
     chatWin = window.open('', '_blank');
   }
 
@@ -3815,7 +3849,7 @@ async function sendReceiptImage(id){
 }
 
 async function buildInfoCardCanvas(s){
-  const W = 640, H = 1470;
+  const W = 640, H = 1590;
   const SCALE = 2;
   const canvas = document.createElement('canvas');
   canvas.width = W*SCALE; canvas.height = H*SCALE;
@@ -3953,6 +3987,48 @@ async function buildInfoCardCanvas(s){
     ctx.beginPath(); ctx.moveTo(pad+16, y); ctx.lineTo(W-pad-16, y); ctx.stroke();
     y += 32;
   });
+
+  // قسم حالة الخلاص — بان واضح لولي الأمر: خالص/متأخر وبشحال باقي
+  {
+    const cs = computeStatus(s);
+    const remaining = TOTAL_MONTHS - cs.paidCount;
+    let payBg, payText, payLine2;
+    if(cs.status === 'done'){
+      payBg = ['#e8f7ee', '#0f5c33'];
+      payText = '✅ الأداء متبوع بالكامل';
+      payLine2 = 'بارك الله فيكم، الدورة خلصات كاملة';
+    } else if(cs.lateCount > 0){
+      payBg = ['#fdecea', '#9b2f22'];
+      payText = `❌ متأخر ${cs.lateCount} ${cs.lateCount===1?'شهر':'أشهر'}`;
+      payLine2 = `المبلغ الشهري: ${s.monthlyAmount || 0} درهم — نرجو التسوية فأقرب وقت`;
+    } else {
+      const nextDue = addMonths(s.startDate, cs.dueCount);
+      const daysLeft = Math.max(0, Math.ceil((nextDue - new Date()) / 86400000));
+      payBg = ['#fff8e8', '#a8710a'];
+      payText = '✅ الأداء متبوع لحد الآن';
+      payLine2 = cs.dueCount < TOTAL_MONTHS
+        ? `باقي ${daysLeft} ${daysLeft===1?'يوم':'يوم'} على الشهر الجاي`
+        : 'باقي شهور قليلة على تمام الدورة';
+    }
+    const payH = 92;
+    roundRectPath(ctx, pad+8, y, W-pad*2-16, payH, 16);
+    ctx.fillStyle = payBg[0];
+    ctx.fill();
+    ctx.save();
+    ctx.strokeStyle = payBg[1];
+    ctx.globalAlpha = .35;
+    ctx.lineWidth = 1.5;
+    roundRectPath(ctx, pad+8, y, W-pad*2-16, payH, 16);
+    ctx.stroke();
+    ctx.restore();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = payBg[1];
+    ctx.font = `bold 18px ${FONT}`;
+    ctx.fillText(payText, W/2, y+38);
+    ctx.font = `13.5px ${FONT}`;
+    ctx.fillText(payLine2, W/2, y+64);
+    y += payH + 20;
+  }
 
   y += 4;
   const warn1H = 66;
@@ -4110,8 +4186,10 @@ async function sendInfoCard(id){
   }
   const digits = s.phone ? normalizePhone(s.phone) : '';
 
+  // فالتطبيق (APK) window.open('', '_blank') مايخدمش مزيان — كيبقى تاب فارغة معلقة.
+  // فالتطبيق كنعتمدو غير على navigator.share اللي كيفتح شاشة المشاركة ديال أندرويد مباشرة.
   let chatWin = null;
-  if(digits && digits.length >= 9){
+  if(digits && digits.length >= 9 && !isNativeApp()){
     chatWin = window.open('', '_blank');
   }
 
@@ -4635,7 +4713,7 @@ async function shareTeacherData(teacherUid, label, phone){
   if(!fbDb) return;
   const digits = phone ? normalizePhone(phone) : '';
   let chatWin = null;
-  if(digits && digits.length >= 9){
+  if(digits && digits.length >= 9 && !isNativeApp()){
     chatWin = window.open('', '_blank');
   }
   try{
@@ -5316,11 +5394,6 @@ const PROXY_SECRET = _decodeObfuscated([31214, 23430, 30830, 20362, 25225, 31173
 function proxyHeaders(){ return { 'Content-Type':'application/json', 'X-Proxy-Key':PROXY_SECRET }; }
 function proxyConfigured(){ return !!(PROXY_URL && !PROXY_URL.includes('YOUR-SUBDOMAIN') && PROXY_SECRET && !PROXY_SECRET.includes('PUT-YOUR')); }
 
-const K_C4 = 'tgBotToken';
-const K_C5 = 'tgChatId';
-const K_C6 = 'tgAdminBotTokenV1';
-const K_C7 = 'tgAdminChatIdV1';
-const K_C8_TG_AICHA_CHAT = 'tgAichaChatIdV2';
 const TG_MSG_ID_KEY = 'tgBackupMsgId'; // معرف الرسالة (الملف) المثبتة اللي كنبدلو فيها فكل مرة
 const TG_REPORT_MSG_ID_KEY = 'tgReportMsgId'; // معرف رسالة التقرير المقروء (منفصلة على ملف الباكاب JSON)
 const LAST_TG_SYNC_KEY = 'lastTgSyncAt';
@@ -5882,10 +5955,6 @@ async function tgRestoreBackup(){
   toast('📨 ترجعات البيانات من Telegram ✅');
 }
 
-const GH_TOKEN_KEY = 'ghToken';
-const GH_REPO_KEY = 'ghRepo';
-const GH_PATH_KEY = 'ghPath';
-const GH_BRANCH_KEY = 'ghBranch';
 const GH_SHA_KEY = 'ghLastSha';
 function ghShaKey(){ return GH_SHA_KEY + ':' + sanitizeUidForPath(currentDataUid); }
 const LAST_GH_SYNC_KEY = 'lastGhSyncAt';
@@ -7693,7 +7762,7 @@ async function gatePhoneSend(){
     if(statusEl) statusEl.textContent = '✅ تصيفط الرمز إلى WhatsApp ديالك';
   }catch(e){
     console.error('gate phone send error', e);
-    if(statusEl) statusEl.textContent = '⚠️ ماقدرناش نصيفطو الرمز — تأكد من الإنترنت';
+    if(statusEl) statusEl.textContent = '⚠️ خطأ: ' + (e && (e.message || e.name) ? (e.message || e.name) : String(e));
   }
 }
 async function gateOtpVerify(){
@@ -7982,11 +8051,7 @@ setInterval(()=>checkHolidayReminder(false), 1000*60*60*6);
 setInterval(()=>studentsReportIfNeeded(), 1000*60*60*6); // recheck every 6h — كيكتب غير إلا فاتو 3 أيام
 	setInterval(()=>autoSaveStudentsReportEveryMinute(), 60000); // نسخة كاملة محدثة كل دقيقة، بلا نت
 
-const WA_ID_INSTANCE_KEY = 'waIdInstance';
-const WA_TOKEN_KEY = 'waToken';
 const WA_CHAT_ID_KEY = 'waChatId';
-const WA_ADMIN_ID_INSTANCE_KEY = 'waAdminIdInstanceV1';
-const WA_ADMIN_TOKEN_KEY = 'waAdminTokenV1';
 const WA_ADMIN_CHAT_ID_KEY = 'waAdminChatIdV1';
 const K_C15 = 'teacherWaChatId';
 const TEACHER_DEFAULT_WA_PHONE_RAW = '+212677186838';
@@ -8182,7 +8247,7 @@ async function reportWaSendCode(target){
     toast('✅ اتصيفط ليك رمز التفعيل فواتساب');
   }catch(e){
     localStorage.removeItem(reportWaOtpPendingKey(target));
-    if(statusEl) statusEl.textContent = '⚠️ ماقدرناش نصيفطو الرمز — تأكد من الرقم والانترنت';
+    if(statusEl) statusEl.textContent = '⚠️ خطأ: ' + (e && (e.message || e.name) ? (e.message || e.name) : String(e));
     toast('⚠️ فشل إرسال الرمز');
   }
 }
