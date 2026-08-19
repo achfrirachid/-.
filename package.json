@@ -1,0 +1,18 @@
+{
+  "name": "tatabbou-talaba-app",
+  "version": "1.0.0",
+  "description": "تطبيق تتبع الطلبة - تطبيق أصلي (Android APK) مبني فوق التطبيق الحالي",
+  "scripts": {
+    "sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/preferences": "^6.0.2",
+    "@capacitor-firebase/authentication": "^6.3.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
