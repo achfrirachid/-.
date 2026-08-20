@@ -4056,37 +4056,43 @@ function closeAsheet(){
 }
 
 // دالة موحدة للمشاركة لضمان استجابة سريعة لـ User Gesture
-function shareViaWhatsAppDirect(){
+async function shareViaWhatsAppDirect(){
   if(!rcardBlob){ toast('⚠️ الصورة ماكاينش'); return; }
-  const file = new File([rcardBlob], rcardFilename, {type:'image/png'});
-
-  // نحاولوا أولا بـ navigator.share حيت هي الأضمن للحفاظ على الـ User Gesture
-  if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
-    navigator.share({files:[file], title: rcardShareTitle, text: rcardShareText})
-      .then(() => { closeAsheet(); toast('📤 اختار WhatsApp من القائمة'); })
-      .catch(e => {
-        if(e.name === 'AbortError') { closeAsheet(); return; }
-        // إذا فشل الـ Web Share فالتطبيق المثبت، ندوزو للـ Native Plugin
-        if(isNativeApp()){
-          nativeShareBlob(rcardBlob, rcardFilename, rcardShareTitle, rcardShareText)
-            .then(ok => { if(ok) closeAsheet(); else toast('⚠️ فشل فتح المشاركة'); });
-        } else {
-          shareViaSystemManual();
-        }
-      });
-    return;
-  }
   
-  // إذا كان navigator.share ماكاينش أصلا (فبعض الـ WebViews)
+  // 1. إذا كان تطبيق مثبت (APK) - نستخدم نظام الهاتف الأصلي فوراً لأنه الأضمن للصور
   if(isNativeApp()){
-    nativeShareBlob(rcardBlob, rcardFilename, rcardShareTitle, rcardShareText)
-      .then(ok => { if(ok) closeAsheet(); else toast('⚠️ فشل فتح المشاركة'); });
+    toast('⏳ جاري فتح الواتساب...');
+    try {
+      const ok = await nativeShareBlob(rcardBlob, "share_image.png", rcardShareTitle, rcardShareText);
+      if(ok) {
+        setTimeout(() => closeAsheet(), 1000);
+      } else {
+        toast('⚠️ فشل فتح المشاركة الأصلية - جرب "مشاركة عامة"');
+      }
+    } catch(e) {
+      toast('⚠️ خطأ في المشاركة: ' + e.message);
+    }
     return;
   }
   
-  toast('⚠️ المتصفح لا يدعم مشاركة الصور مباشرة');
-  downloadReceiptCardBtn();
-  closeAsheet();
+  // 2. إذا كان في المتصفح - نستخدم Web Share API
+  const file = new File([rcardBlob], "share_image.png", {type:'image/png'});
+  if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    try {
+      await navigator.share({files:[file], title: rcardShareTitle, text: rcardShareText});
+      toast('📤 اختار WhatsApp من القائمة');
+      closeAsheet();
+    } catch(e) {
+      if(e.name !== 'AbortError') {
+        toast('⚠️ فشل نظام المشاركة - جرب التحميل المباشر');
+        shareViaSystemManual();
+      }
+    }
+  } else {
+    toast('⚠️ المتصفح لا يدعم مشاركة الصور مباشرة');
+    downloadReceiptCardBtn();
+    closeAsheet();
+  }
 }
 
 function shareViaTelegramDirect(){
@@ -6557,29 +6563,45 @@ function blobToBase64(blob){
 }
 async function nativeShareBlob(blob, filename, title, text){
   try{
-    if(!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Share || !window.Capacitor.Plugins.Filesystem) return false;
+    if(!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Share || !window.Capacitor.Plugins.Filesystem) {
+      console.warn('Capacitor plugins missing');
+      return false;
+    }
     const { Filesystem, Directory } = window.Capacitor.Plugins;
     const { Share } = window.Capacitor.Plugins;
+    
+    // استخدام اسم ملف آمن بدون حروف عربية لتجنب مشاكل الـ URI
+    const safeFilename = "temp_share_" + Date.now() + ".png";
     const base64 = await blobToBase64(blob);
-    // تصحيح مهم (تأكد منو بفحص AndroidManifest.xml + resources.arsc ديال الـ APK
-    // الحقيقي): الـ FileProvider المفعّل فالتطبيق مربوط بـ res/xml/file_paths.xml
-    // (ماشي image_share_filepaths.xml اللي كان مكتوب فالتعليق القديم — هاداك
-    // ملف زائد ماشي مستعمل والو). و file_paths.xml فيه غير:
-    //   <cache-path name="my_cache_images" path=""/>   → كيغطي Directory.Cache كاملة
-    //   <external-path name="my_images" path=""/>      → كيغطي التخزين الخارجي
-    // ماكاينش <files-path> خالص، يعني Directory.Data (اللي كنا كنكتبو فيها قبل)
-    // ماعندهاش أي جذر مطابق فالـ provider، فكانت FileProvider كترمي استثناء
-    // (مقروض هنا فـ catch)، وهاداك السبب الحقيقي اللي كان كيخلي واتساب
-    // ما كيتفتحش والو. الحل: نكتبو فـ Directory.Cache باش تطابق الجذر
-    // المفعّل فعلا.
-    const path = 'shared_images/' + filename;
-    await Filesystem.writeFile({ path, data: base64, directory: Directory.Cache, recursive: true });
-    const uriResult = await Filesystem.getUri({ path, directory: Directory.Cache });
-    await Share.share({ title, text, files: [uriResult.uri], dialogTitle: 'شارك عبر...' });
+    
+    const path = 'shared_images/' + safeFilename;
+    
+    // التأكد من كتابة الملف في Cache لضمان صلاحيات الـ FileProvider
+    await Filesystem.writeFile({ 
+      path: path, 
+      data: base64, 
+      directory: Directory.Cache, 
+      recursive: true 
+    });
+    
+    const uriResult = await Filesystem.getUri({ 
+      path: path, 
+      directory: Directory.Cache 
+    });
+    
+    // فتح قائمة المشاركة الأصلية
+    await Share.share({
+      title: title,
+      text: text,
+      files: [uriResult.uri],
+      dialogTitle: 'شارك عبر...'
+    });
+    
     return true;
   }catch(e){
-    console.warn('nativeShareBlob failed:', e);
-    return false; // المستخدم لغى المشاركة ولا الإضافة ماكاينش
+    console.error('nativeShareBlob error:', e);
+    toast('❌ خطأ تقني: ' + e.message);
+    return false;
   }
 }
 // طريقة بديلة مضمونة: رابط whatsapp:// (ماشي https://wa.me) كيجبر أندرويد
