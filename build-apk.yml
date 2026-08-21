@@ -1,0 +1,124 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Add Android platform (first run only, safe to repeat)
+        run: npx cap add android || true
+
+      - name: Add custom WhatsApp share plugin
+        run: |
+          mkdir -p android/app/src/main/java/com/achfrirachid/tatabbou
+
+          cat > android/app/src/main/java/com/achfrirachid/tatabbou/WhatsAppSharePlugin.java << 'EOF'
+          package com.achfrirachid.tatabbou;
+
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.net.Uri;
+          import androidx.core.content.FileProvider;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+
+          import java.io.File;
+
+          @CapacitorPlugin(name = "WhatsAppShare")
+          public class WhatsAppSharePlugin extends Plugin {
+
+              @PluginMethod
+              public void shareImage(PluginCall call) {
+                  String filePath = call.getString("path");
+                  if (filePath == null) {
+                      call.reject("path required");
+                      return;
+                  }
+                  try {
+                      File file = new File(filePath);
+                      Uri uri = FileProvider.getUriForFile(
+                          getContext(),
+                          getContext().getPackageName() + ".fileprovider",
+                          file
+                      );
+
+                      Intent intent = new Intent(Intent.ACTION_SEND);
+                      intent.setType("image/png");
+                      intent.putExtra(Intent.EXTRA_STREAM, uri);
+                      intent.setPackage("com.whatsapp");
+                      intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                      PackageManager pm = getContext().getPackageManager();
+                      if (intent.resolveActivity(pm) != null) {
+                          getContext().startActivity(intent);
+                          JSObject ret = new JSObject();
+                          ret.put("opened", true);
+                          call.resolve(ret);
+                      } else {
+                          call.reject("whatsapp_not_installed");
+                      }
+                  } catch (Exception e) {
+                      call.reject("share_failed: " + e.getMessage());
+                  }
+              }
+          }
+          EOF
+
+          cat > android/app/src/main/java/com/achfrirachid/tatabbou/MainActivity.java << 'EOF'
+          package com.achfrirachid.tatabbou;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(WhatsAppSharePlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+          }
+          EOF
+
+      - name: Ensure internet permissions are declared
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' "$MANIFEST" || \
+          sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
+
+      - name: Sync web assets into native project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
