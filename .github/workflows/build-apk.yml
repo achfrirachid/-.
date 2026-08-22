@@ -15,10 +15,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -73,11 +73,11 @@ jobs:
                       intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                       intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-                      // مهم: resolveActivity() كيحتاج صلاحية رؤية التطبيق الآخر
-                      // (queries فـ manifest)، وإلا كيرجع null حتى لو واتساب
-                      // مثبت فعلا — فكان السبب اللي كيخلي الزر يفشل بصمت.
-                      // الأصح: نحاولو startActivity رأسا ونمسكو الاستثناء إلا
-                      // ماكانش واتساب مثبت فعليا (ActivityNotFoundException).
+                      // Ù…Ù‡Ù…: resolveActivity() ÙƒÙŠØ­ØªØ§Ø¬ ØµÙ„Ø§Ø­ÙŠØ© Ø±Ø¤ÙŠØ© Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø§Ù„Ø¢Ø®Ø±
+                      // (queries ÙÙ€ manifest)ØŒ ÙˆØ¥Ù„Ø§ ÙƒÙŠØ±Ø¬Ø¹ null Ø­ØªÙ‰ Ù„Ùˆ ÙˆØ§ØªØ³Ø§Ø¨
+                      // Ù…Ø«Ø¨Øª ÙØ¹Ù„Ø§ â€” ÙÙƒØ§Ù† Ø§Ù„Ø³Ø¨Ø¨ Ø§Ù„Ù„ÙŠ ÙƒÙŠØ®Ù„ÙŠ Ø§Ù„Ø²Ø± ÙŠÙØ´Ù„ Ø¨ØµÙ…Øª.
+                      // Ø§Ù„Ø£ØµØ­: Ù†Ø­Ø§ÙˆÙ„Ùˆ startActivity Ø±Ø£Ø³Ø§ ÙˆÙ†Ù…Ø³ÙƒÙˆ Ø§Ù„Ø§Ø³ØªØ«Ù†Ø§Ø¡ Ø¥Ù„Ø§
+                      // Ù…Ø§ÙƒØ§Ù†Ø´ ÙˆØ§ØªØ³Ø§Ø¨ Ù…Ø«Ø¨Øª ÙØ¹Ù„ÙŠØ§ (ActivityNotFoundException).
                       try {
                           getContext().startActivity(intent);
                           JSObject ret = new JSObject();
@@ -117,8 +117,8 @@ jobs:
       - name: Declare package visibility for WhatsApp (Android 11+ requirement)
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
-          # بلا هاد <queries>، resolveActivity() كيرجع null حتى لو واتساب مثبت
-          # فالهاتف — هاد السبب اللي كان كيخلي زر "واتساب مباشرة" يفشل بصمت.
+          # Ø¨Ù„Ø§ Ù‡Ø§Ø¯ <queries>ØŒ resolveActivity() ÙƒÙŠØ±Ø¬Ø¹ null Ø­ØªÙ‰ Ù„Ùˆ ÙˆØ§ØªØ³Ø§Ø¨ Ù…Ø«Ø¨Øª
+          # ÙØ§Ù„Ù‡Ø§ØªÙ â€” Ù‡Ø§Ø¯ Ø§Ù„Ø³Ø¨Ø¨ Ø§Ù„Ù„ÙŠ ÙƒØ§Ù† ÙƒÙŠØ®Ù„ÙŠ Ø²Ø± "ÙˆØ§ØªØ³Ø§Ø¨ Ù…Ø¨Ø§Ø´Ø±Ø©" ÙŠÙØ´Ù„ Ø¨ØµÙ…Øª.
           if ! grep -q '<queries>' "$MANIFEST"; then
             sed -i '/<\/manifest>/i\    <queries>\n        <package android:name="com.whatsapp" />\n    </queries>' "$MANIFEST"
           fi
