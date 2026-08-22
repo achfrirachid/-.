@@ -288,6 +288,11 @@ if (navigator.storage && navigator.storage.persist) {
     <div class="rcard-body-scroll">
       <img id="rcardImg" alt="وصل أداء">
     </div>
+    <div class="rcard-actions" style="display:flex;gap:8px;padding:12px 16px 18px;flex-wrap:wrap;">
+      <button class="pill-btn active" style="background:#25D366;color:#fff;flex:1 1 100%;" onclick="shareCardToWhatsAppReliable()">🟢 صيفط لواتساب</button>
+      <button class="pill-btn active" style="flex:1;min-width:120px;" onclick="shareReceiptCardManual()">📤 مشاركة عامة</button>
+      <button class="pill-btn" style="flex:1;min-width:120px;" onclick="downloadReceiptCardBtn()">📥 تحميل الصورة</button>
+    </div>
   </div>
 </div>
 
@@ -479,10 +484,8 @@ if (navigator.storage && navigator.storage.persist) {
       <button class="btn-secondary" style="width:100%;background:var(--green-light);border-color:var(--green);color:var(--green);" onclick="closeOverlay('adminPanelOverlay'); openStudentsReportPreview()">📄 تقرير الطلبة</button>
       <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('adminPanelOverlay'); adminToggleSelectMode()">☑️ تحديد الطلبة</button>
       <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('adminPanelOverlay'); openSettings()">💾 نسخة احتياطية</button>
-      <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('adminPanelOverlay'); openRestoreFilePicker()">📂 استرجاع من ملف</button>
       <button class="btn-secondary" style="width:100%;color:var(--red);border-color:#f3c9c4;" onclick="openDeleteStudentsMenu()">🗑️ حذف الطلبة (محدد: <span id="adminSelCount">0</span>)</button>
       <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('adminPanelOverlay'); openTrashBinMenu()">♻️ سلة المهملات (10 أيام)</button>
-      <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('adminPanelOverlay'); openCloudHealthMenu()">☁️ حالة السحابات</button>
       <button class="btn-secondary" style="width:100%;" id="appAutoLockBtn" onclick="toggleAppAutoLock()">🔒 القفل التلقائي للتطبيق: تفعيل</button>
       <div id="appAutoLockDurationRow" style="display:none;padding:6px 2px 0;">
         <label style="font-size:12.5px;color:var(--sub);display:block;margin-bottom:4px;">⏱️ المدة قبل القفل (بلا حركة فالشاشة)</label>
@@ -539,17 +542,6 @@ if (navigator.storage && navigator.storage.persist) {
   </div>
 </div>
 
-
-<div class="overlay" id="fld_a16">
-  <div class="sheet">
-    <h2>☁️ حالة السحابات</h2>
-    <p style="font-size:13px;color:var(--sub);line-height:1.7;">التطبيق كيتأكد أن كل السحابات خدامة أوتوماتيك كل يوم بمجرد ما يكون النت متوفر. أي سحابة فيها مشكل كتعاود تتحاول وحدها فورا.</p>
-    <div id="cloudHealthList" style="max-height:50vh;overflow-y:auto;"></div>
-    <div class="sheet-actions">
-      <button class="btn-secondary" style="width:100%;" onclick="closeOverlay('fld_a16')">إغلاق</button>
-    </div>
-  </div>
-</div>
 
 <div class="overlay" id="settingsOverlay">
   <div class="sheet">
@@ -799,37 +791,6 @@ waToken: 4e3ff8f3e82a4afe93bbfceb52a2f305b15a3e341af3407c8c" style="min-height:1
       <button class="pill-btn active" onclick="tgDownloadFile()">📥 تحميل الملف</button>
     </div>
 
-    <h2 style="margin-top:18px; color:#25D366;">🟢 تقرير WhatsApp — تلقائي بالكامل</h2>
-    <div class="settings-row" style="border-bottom:none;">
-      <span style="font-size:12.5px;">التوكن ديال WhatsApp (Green API) مكتوب مباشرة فالتطبيق (فوق فالكود) — التطبيق كيرسل direct بلا سيرفر وسيط. دخل رقم هاتفك ودوس "تفعيل": يتسجل ويخدم دغيا بلا رمز تأكيد (الرقم محصور فرشيد أو عائشة فقط). من بعد، أي تعديل (إضافة/تبديل/خلاص) أو رجوع الانترنت، التقرير كيوصل تلقائيا لهاد الرقم. تقدر تلغي الإرسال فأي وقت بزر واحد.</span>
-    </div>
-    <div class="settings-row" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px;">
-      <b style="font-size:12.5px;">📱 رقم الأدمين</b>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="tel" id="repWaPhoneAdmin" placeholder="مثلا 0666299689" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--ink);">
-        <button class="pill-btn active" style="background:#25D366;color:#fff;flex:0 0 auto;" onclick="reportWaSendCode('admin')">تفعيل فوري</button>
-      </div>
-      <div id="repWaStatusAdmin" style="font-size:12px;color:var(--sub);"></div>
-      <div id="repWaActionsAdmin"></div>
-    </div>
-    <div class="settings-row" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px;">
-      <b style="font-size:12.5px;">📱 رقم المعلمة</b>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="tel" id="repWaPhoneTeacher" placeholder="رقم واتساب المعلمة" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--ink);">
-        <button class="pill-btn active" style="background:#25D366;color:#fff;flex:0 0 auto;" onclick="reportWaSendCode('teacher')">تفعيل فوري</button>
-      </div>
-      <div id="repWaStatusTeacher" style="font-size:12px;color:var(--sub);"></div>
-      <div id="repWaActionsTeacher"></div>
-    </div>
-    <div class="settings-row" style="border-bottom:none;">
-      <span>📊 صيفط التقرير الموحد دابا إلى WhatsApp — تقرير حي واحد بحالة الخلاص</span>
-      <button class="pill-btn active" onclick="waUploadBackup(true)">⬆️ صيفط دابا</button>
-    </div>
-    <div class="settings-row" style="border-bottom:none;">
-      <span>📋 قالب جاهز باش تزيد طالب مباشرة من واتساب — كيبقى لاصق فالمحادثة</span>
-      <button class="pill-btn active" style="background:#25D366; color:#fff;" onclick="sendStudentTemplateToWhatsApp(true)">📋 صيفط القالب</button>
-    </div>
-
     <h2 style="margin-top:18px;">🐙 نسخة احتياطية عبر GitHub</h2>
     <div class="settings-row" style="border-bottom:none;">
       <span style="font-size:12.5px;">دير Personal Access Token من GitHub (صلاحية Contents: Read/Write على ريبو خاص بيك)، وحط اسم الريبو بصيغة owner/repo. الملفات كيتسجلو فمجلد خاص بيك (باسم المعرف ديالك) باش ما يتخلطوش مع معلمات آخرين.</span>
@@ -859,12 +820,6 @@ waToken: 4e3ff8f3e82a4afe93bbfceb52a2f305b15a3e341af3407c8c" style="min-height:1
     <div class="settings-row" style="border-bottom:none;">
       <span>نزّل تقرير "تقرير الطلبة" من GitHub للهاتف</span>
       <button class="pill-btn active" onclick="ghDownloadReport()">📥 تحميل التقرير</button>
-    </div>
-
-    <h2 style="margin-top:18px;">🟢 واتساب</h2>
-    <div class="settings-row" style="border-bottom:none;">
-      <span>واتساب المعلمة — رقمها باش يوصلها تقرير الطلبة تلقائيا</span>
-      <button class="pill-btn active" onclick="teacherLoginFlow()">🟢 واتساب المعلمة</button>
     </div>
 
     <div class="sheet-actions" style="margin-top:20px;">
@@ -3286,9 +3241,12 @@ function openAdd(){
   applyDraftIfAny('addStudent');
   document.getElementById('addOverlay').classList.add('open');
 }
-function openEdit(id){
+async function openEdit(id){
   const s = students.find(x=>x.id===id);
   if(!s) return;
+  const code = await askCodeAsync('🔒 باش تعدل بيانات الطالب، دخل الكود السري:');
+  if(code === null) return;
+  if(!isValidCode(code)){ toast('⚠️ الكود غالط'); return; }
   editingId = id;
   removePhotoFlag = false;
   document.getElementById('addSheetTitle').textContent = 'تعديل بيانات الطالب';
@@ -3747,7 +3705,7 @@ function drawImageCover(ctx, img, x, y, w, h){
 async function buildReceiptCanvas(s){
   const {paidCount, dueCount} = computeStatus(s);
   const W = 640, H = 1000;
-  const SCALE = 4; // render at higher resolution for a crisp, clear image
+  const SCALE = 2; // render at higher resolution for a crisp, clear image (lowered from 4 — much faster to encode, still sharp)
   const canvas = document.createElement('canvas');
   canvas.width = W*SCALE; canvas.height = H*SCALE;
   const ctx = canvas.getContext('2d');
@@ -4009,13 +3967,19 @@ async function openCardPreview(canvas, {title, filename, shareTitle, shareText, 
   rcardShareTitle = shareTitle;
   rcardShareText = shareText;
   document.getElementById('rcardTitle').textContent = title;
-  document.getElementById('rcardImg').src = canvas.toDataURL('image/png');
+  // كنستعملو نفس الـ blob لي تصاوب مرة وحدة (بلا toDataURL اللي كان كيعاود يشفر
+  // الصورة بكاملها مرة ثانية — هادشي كان سبب رئيسي فالتأخير ديال 15-20 ثانية)
+  if(rcardImgUrl) URL.revokeObjectURL(rcardImgUrl);
+  rcardImgUrl = URL.createObjectURL(blob);
+  document.getElementById('rcardImg').src = rcardImgUrl;
   document.getElementById('rcardOverlay').classList.add('open');
   if(onReady) onReady();
 }
+let rcardImgUrl = null;
 function closeReceiptCard(){
   document.getElementById('rcardOverlay').classList.remove('open');
   rcardBlob = null;
+  if(rcardImgUrl){ URL.revokeObjectURL(rcardImgUrl); rcardImgUrl = null; }
 }
 function downloadReceiptCardBtn(){
   if(!rcardBlob) return;
@@ -4025,6 +3989,23 @@ function downloadReceiptCardBtn(){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 5000);
   toast('📥 تحملات صورة البطاقة');
+}
+// ============================================================
+// بديل موثوق 100% لصيفط البطاقة لواتساب — بلا Share plugin خالص
+// (هادشي هو اللي كان كيبلوكا/كيهنك فالتطبيق المعبأ). هنا كنديرو غير
+// حاجتين بسيطتين وموثوقتين: (1) تحميل الصورة بنفس الطريقة ديال زر
+// "تحميل الصورة" العادي (عنصر <a download> — ماشي Share plugin)،
+// (2) نحلو واتساب مباشرة بـ URL عادي (whatsapp://) باش يختار المستخدم
+// المرسل إليه ويلصق الصورة بيدو من المعرض (آخر صورة = هي هادي).
+// ============================================================
+function shareCardToWhatsAppReliable(){
+  if(!rcardBlob){ toast('⚠️ الصورة ماكاينش، عاود فتح البطاقة'); return; }
+  downloadReceiptCardBtn();
+  toast('📥 تحملات الصورة. دابا غادي يحل واتساب — دوس 📎 واختار آخر صورة فالمعرض');
+  setTimeout(()=>{
+    try{ window.location.href = 'whatsapp://send?text='; }
+    catch(e){ window.open('https://wa.me/', '_blank'); }
+  }, 1400);
 }
 // مهم: أي فانكسيون كتدير navigator.share/Share.share خاصها تبقى استجابة
 // مباشرة (onclick)، بلا await طويل قبلها — أي انتظار طويل كيفسخ صلاحية
@@ -4175,6 +4156,10 @@ async function openReceiptCard(id){
   const s = students.find(x=>x.id===id);
   if(!s) return;
 
+  const code = await askCodeAsync('🔒 باش تفتح الوصل، دخل الكود السري:');
+  if(code === null) return;
+  if(!isValidCode(code)){ toast('⚠️ الكود غالط'); return; }
+
   toast('⏳ كيتصاوب الوصل...');
   let canvas;
   try{
@@ -4193,7 +4178,7 @@ async function openReceiptCard(id){
 
 async function buildInfoCardCanvas(s){
   const W = 640, H = 1590;
-  const SCALE = 4;
+  const SCALE = 2; // lowered from 4 — much faster to encode, still sharp
   const canvas = document.createElement('canvas');
   canvas.width = W*SCALE; canvas.height = H*SCALE;
   const ctx = canvas.getContext('2d');
@@ -4480,6 +4465,10 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight){
 async function sendInfoCard(id){
   const s = students.find(x=>x.id===id);
   if(!s) return;
+
+  const code = await askCodeAsync('🔒 باش تفتح بطاقة الجمعية، دخل الكود السري:');
+  if(code === null) return;
+  if(!isValidCode(code)){ toast('⚠️ الكود غالط'); return; }
 
   toast('⏳ كتتصاوب بطاقة الجمعية...');
   let canvas;
@@ -9271,31 +9260,6 @@ async function ensureDailyCloudSync(){
   localStorage.setItem(currentProfileStorageKey(LAST_DAILY_FORCE_SYNC_KEY), String(Date.now()));
   await runPeriodicCloudSync(true);
 }
-function renderCloudHealthStatus(){
-  const box = document.getElementById('cloudHealthList');
-  if(!box) return;
-  const health = getCloudHealth();
-  const names = Object.keys(health);
-  if(names.length === 0){
-    box.innerHTML = '<p style="font-size:13px;color:var(--sub);">ماكاينش معلومات بعد — غادي تبان من بعد أول مزامنة.</p>';
-    return;
-  }
-  box.innerHTML = names.map(name=>{
-    const h = health[name];
-    const color = h.ok ? 'var(--green)' : 'var(--red)';
-    const label = h.ok ? '✅ خدامة' : `⚠️ فيها مشكل${h.consecutiveFails>1 ? ' ('+h.consecutiveFails+' محاولات)' : ''}`;
-    const when = h.lastCheckedAt ? new Date(h.lastCheckedAt).toLocaleString('ar-EG') : '—';
-    return `<div class="settings-row">
-      <span>${name.replace(/</g,'&lt;')}</span>
-      <span style="color:${color};font-size:12px;text-align:left;">${label}<br><small style="color:var(--sub);">${when}</small></span>
-    </div>`;
-  }).join('');
-}
-function openCloudHealthMenu(){
-  renderCloudHealthStatus();
-  document.getElementById('fld_a16').classList.add('open');
-}
-
 let autoSyncStartTimer = null;
 let autoSyncInFlight = false;
 const AUTO_SYNC_START_DELAY_MS = 2200;
