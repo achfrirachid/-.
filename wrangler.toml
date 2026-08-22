@@ -1,0 +1,12 @@
+name = "talaba-proxy"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "talaba-backup"
+database_id = "2a35c5b2-3fa1-4cc9-b36a-569979f49d72"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "6962ab9518c34cbb8dd83d1870f074c3"
